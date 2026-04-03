@@ -1,0 +1,26 @@
+================================================================================
+TARIKA 2: Internet se jodo (Wi-Fi / router kharab ho to) — ngrok
+================================================================================
+
+1) PC par backend chalao: REELBOOST-START-SERVER.bat
+
+2) https://ngrok.com se free account + ngrok download + install
+
+3) CMD / PowerShell:
+     ngrok http 3000
+
+4) Screen par "Forwarding" line mein https://xxxx.ngrok-free.app jaisa URL aayega
+
+5) Phone par app mein "PC server address":
+     https://xxxx.ngrok-free.app
+   (http nahi — https jo ngrok de)
+
+6) Save & connect
+
+Note: Free ngrok URL har restart par badal sakta hai. Phone mobile data par bhi chal sakta hai.
+
+================================================================================
+Agar ngrok "Visit Site" page dikhaaye API par:
+================================================================================
+Backend / app ko header bhejna pad sakta hai: ngrok-skip-browser-warning: true
+(agar problem aaye to bata dena — code mein add kar denge)
