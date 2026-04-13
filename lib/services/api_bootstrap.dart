@@ -46,6 +46,29 @@ Future<void> _purgeInsecureApiPrefs(SharedPreferences prefs) async {
   }
 }
 
+String _expectedProductionHost() => Uri.parse(ApiConfig.apiOrigin).host.toLowerCase();
+
+/// Drop cached base if it points at a host other than [ApiConfig.apiOrigin] (stale LAN/ngrok/old deploy).
+/// Skipped when using `--dart-define=API_BASE_URL=...` so a custom build target is preserved.
+Future<void> _purgeStaleCachedApiBase(SharedPreferences prefs) async {
+  if (!ApiService.usesCompileTimeDefaultApiBase) return;
+  final cached = prefs.getString(_prefsKeyApiBase)?.trim();
+  if (cached == null || cached.isEmpty) return;
+  if (_isDisallowedStoredApiUrl(cached)) return;
+  try {
+    final normalized = ApiService.normalizeApiBase(cached);
+    final host = Uri.parse(normalized).host.toLowerCase();
+    if (host != _expectedProductionHost()) {
+      await prefs.remove(_prefsKeyApiBase);
+      ApiLog.network(
+        'ApiBootstrap: cleared stale API cache (was $host, expected $_expectedProductionHost())',
+      );
+    }
+  } catch (e, st) {
+    ApiLog.apiFailure('ApiBootstrap: stale cache check failed', e, st);
+  }
+}
+
 /// Runs before `runApp`: picks API base, probes `/health`, caches successes.
 class ApiBootstrap {
   ApiBootstrap._();
@@ -55,8 +78,9 @@ class ApiBootstrap {
     final prefsEarly = await SharedPreferences.getInstance();
     try {
       await _purgeInsecureApiPrefs(prefsEarly);
+      await _purgeStaleCachedApiBase(prefsEarly);
     } catch (e, st) {
-      ApiLog.network('ApiBootstrap: purge insecure prefs failed', e, st);
+      ApiLog.apiFailure('ApiBootstrap: purge prefs failed', e, st);
     }
 
     var rawManual = prefsEarly.getString(_prefsKeyManualApi)?.trim();
@@ -79,13 +103,13 @@ class ApiBootstrap {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_prefsKeyApiBase, base);
       } else {
-        ApiLog.network('ApiBootstrap: unreachable $origin/health (base=$base)');
+        ApiLog.apiFailure('ApiBootstrap: unreachable $origin/health (base=$base)');
         ApiRuntime.bootstrapDetail =
             'Server not reachable at $origin/health. Check internet, Railway deployment, and server logs.\n\n'
             'Verify Railway env (e.g. MONGO_URI), MongoDB Atlas network access, and deployment health.';
       }
     } catch (e, st) {
-      ApiLog.network('ApiBootstrap.initialize failed', e, st);
+      ApiLog.apiFailure('ApiBootstrap.initialize failed', e, st);
       final prefs = await SharedPreferences.getInstance();
       final cached = prefs.getString(_prefsKeyApiBase);
 
@@ -100,6 +124,8 @@ class ApiBootstrap {
       }
       ApiRuntime.healthCheckOk = false;
       ApiRuntime.bootstrapDetail = e.toString();
+    } finally {
+      ApiLog.debugResolvedApiBase(ApiService.baseUrl);
     }
   }
 
@@ -163,7 +189,7 @@ class ApiBootstrap {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefsKeyApiBase, base);
     } else {
-      ApiLog.network('ApiBootstrap.recheckHealth failed $origin/health');
+      ApiLog.apiFailure('ApiBootstrap.recheckHealth failed $origin/health');
       ApiRuntime.bootstrapDetail =
           'Still unreachable at $origin/health. Check internet, DNS, and Railway.\n\n'
           'Rebuild with a different base if needed: --dart-define=API_BASE_URL=<https-url>/api';

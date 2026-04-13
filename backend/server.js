@@ -95,6 +95,20 @@ app.get('/health/ready', (req, res) => {
   });
 });
 
+app.post('/analyze', (req, res) => {
+  const caption = String(req.body?.caption || '').trim();
+  if (!caption) {
+    return res.status(400).json({
+      success: false,
+      message: 'caption is required',
+    });
+  }
+  return res.json({
+    success: true,
+    audioSuggestion: 'sample song',
+  });
+});
+
 app.use('/api/auth', authRoutes);
 
 app.use('/api/admin', adminMiddleware, adminRoutes);

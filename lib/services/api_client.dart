@@ -53,8 +53,9 @@ class ApiClient {
         },
         onError: (e, handler) async {
           await _handle401(e.response?.statusCode, e.requestOptions.path);
-          ApiLog.network(
-            'Dio ${e.requestOptions.method} ${e.requestOptions.uri}',
+          final uri = e.requestOptions.uri;
+          ApiLog.apiFailure(
+            'Dio ${e.requestOptions.method} $uri (${e.type})',
             e,
             e.stackTrace,
           );
@@ -78,7 +79,7 @@ class ApiClient {
     try {
       await fn();
     } catch (err, st) {
-      ApiLog.network('onUnauthorized failed', err, st);
+      ApiLog.apiFailure('onUnauthorized failed', err, st);
     }
   }
 }

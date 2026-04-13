@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 const { validationResult } = require('express-validator');
 const User = require('../models/User');
 const { buildPostAnalyzeUsageMeta } = require('../services/usageService');
-const { sendPasswordResetEmail, logSmtpEnvDiagnostics } = require('../services/mailService');
+const { sendPasswordResetEmail } = require('../services/mailService');
 
 function signToken(userId) {
   const secret = String(process.env.JWT_SECRET || '').trim();
@@ -134,40 +134,6 @@ function resolveResetLinkBase() {
   return '';
 }
 
-function maskEmailForLog(addr) {
-  const e = String(addr || '').trim().toLowerCase();
-  const at = e.indexOf('@');
-  if (at < 1) return '(invalid)';
-  return `${e[0]}***${e.slice(at)}`;
-}
-
-/**
- * When email send fails (or reset URL is missing), include devResetToken / devResetLink only if
- * process.env.EXPOSE_RESET_LINK_ON_MAIL_FAILURE === 'true' (exact string; not "True", not trimmed variants).
- * Insecure — use only for debugging on Railway.
- */
-function exposeResetLinkOnMailFailure() {
-  return process.env.EXPOSE_RESET_LINK_ON_MAIL_FAILURE === 'true';
-}
-
-function logPublicBaseUrlDiagnostics() {
-  const pub = String(process.env.PUBLIC_BASE_URL || '').trim();
-  const explicit = String(process.env.PASSWORD_RESET_BASE_URL || '').trim();
-  // eslint-disable-next-line no-console
-  console.log('[auth] reset URL env', {
-    PUBLIC_BASE_URL_set: !!pub,
-    PUBLIC_BASE_URL_length: pub.length,
-    PASSWORD_RESET_BASE_URL_set: !!explicit,
-    resolvedBase: resolveResetLinkBase() || '(empty)',
-  });
-  if (!pub && !explicit) {
-    // eslint-disable-next-line no-console
-    console.error(
-      '[auth] Set PUBLIC_BASE_URL=https://<your-railway-host> (no trailing slash) so reset emails get a valid link.'
-    );
-  }
-}
-
 function buildResetLink(rawToken) {
   const base = resolveResetLinkBase();
   if (!base) return '';
@@ -263,6 +229,9 @@ function getResetPasswordPage(req, res) {
   return res.send(html);
 }
 
+const FORGOT_PASSWORD_GENERIC_MESSAGE =
+  'If an account with that email exists, a reset link has been sent.';
+
 async function forgotPassword(req, res, next) {
   try {
     const errors = validationResult(req);
@@ -274,26 +243,12 @@ async function forgotPassword(req, res, next) {
     }
 
     const email = String(req.body.email || '').trim().toLowerCase();
-    // eslint-disable-next-line no-console
-    console.log('[auth] forgot-password: request received', { email: maskEmailForLog(email) });
-
-    const genericResponse = {
-      success: true,
-      message:
-        'If this email is registered, a password reset link has been sent. Please check your inbox.',
-    };
+    const genericResponse = { success: true, message: FORGOT_PASSWORD_GENERIC_MESSAGE };
 
     const user = await User.findOne({ email });
     if (!user) {
-      // eslint-disable-next-line no-console
-      console.log('[auth] forgot-password: no user for email (generic success)', {
-        email: maskEmailForLog(email),
-      });
       return res.status(200).json(genericResponse);
     }
-
-    // eslint-disable-next-line no-console
-    console.log('[auth] forgot-password: user found, issuing reset token', { email: maskEmailForLog(user.email) });
 
     const rawToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
@@ -307,31 +262,13 @@ async function forgotPassword(req, res, next) {
     await user.save();
 
     const resetLink = buildResetLink(rawToken);
-    const isNonProd = process.env.NODE_ENV !== 'production';
-    const exposeLink = exposeResetLinkOnMailFailure();
-
     if (!resetLink) {
-      logPublicBaseUrlDiagnostics();
       // eslint-disable-next-line no-console
-      console.error('[auth] forgot-password: RESET_LINK_NOT_CONFIGURED (PUBLIC_BASE_URL / PASSWORD_RESET_BASE_URL)', {
-        EXPOSE_RESET_LINK_ON_MAIL_FAILURE: process.env.EXPOSE_RESET_LINK_ON_MAIL_FAILURE ?? '(unset)',
-        exposeResetLinkInResponse: exposeLink,
-      });
-      const fallback = exposeLink ? { devResetToken: rawToken, devResetLink: null } : {};
-      return res.status(503).json({
-        success: false,
-        code: 'RESET_LINK_NOT_CONFIGURED',
-        message:
-          'Password reset link URL is not configured. Set PUBLIC_BASE_URL to your Railway HTTPS root (e.g. https://xxx.up.railway.app) or PASSWORD_RESET_BASE_URL.',
-        ...fallback,
-      });
+      console.error(
+        '[auth] forgot-password: reset link URL missing — set PUBLIC_BASE_URL or PASSWORD_RESET_BASE_URL'
+      );
+      return res.status(200).json(genericResponse);
     }
-
-    // eslint-disable-next-line no-console
-    console.log('[auth] forgot-password: built reset link', {
-      hostPreview: resetLink.split('?')[0],
-      tokenLength: rawToken.length,
-    });
 
     const mailOutcome = await sendPasswordResetEmail({
       to: user.email,
@@ -340,57 +277,12 @@ async function forgotPassword(req, res, next) {
     });
 
     if (!mailOutcome.sent) {
-      logSmtpEnvDiagnostics('after send failure');
       // eslint-disable-next-line no-console
-      console.error('[auth] forgot-password: RESET_EMAIL_FAILED', {
-        reason: mailOutcome.reason,
-        smtpMessage: mailOutcome.message,
-        smtp: mailOutcome.smtp,
-        recipient: maskEmailForLog(user.email),
-        EXPOSE_RESET_LINK_ON_MAIL_FAILURE: process.env.EXPOSE_RESET_LINK_ON_MAIL_FAILURE ?? '(unset)',
-        exposeResetLinkInResponse: exposeLink,
-      });
-
-      const fallback =
-        exposeLink
-          ? {
-              devResetToken: rawToken,
-              devResetLink: resetLink,
-              mailReason: mailOutcome.reason,
-            }
-          : {};
-
-      return res.status(503).json({
-        success: false,
-        code: 'RESET_EMAIL_FAILED',
-        message:
-          mailOutcome.reason === 'smtp_not_configured'
-            ? 'Could not send email: mail is not configured. Set EMAIL_USER and EMAIL_PASS (Gmail App Password) on Railway.'
-            : mailOutcome.reason === 'smtp_verify_failed'
-              ? 'Could not connect to Gmail SMTP. Check App Password and set MAIL_VERIFY_BEFORE_SEND=false if verify is blocked on your host.'
-              : 'Could not send the reset email. Check Railway logs ([mail] lines), Gmail App Password, and try again.',
-        ...fallback,
-      });
+      console.error('[auth] forgot-password: mail not sent', { reason: mailOutcome.reason });
+      return res.status(200).json(genericResponse);
     }
 
-    // eslint-disable-next-line no-console
-    console.log('[auth] forgot-password: success', {
-      to: maskEmailForLog(user.email),
-      messageId: mailOutcome.messageId,
-    });
-
-    if (isNonProd) {
-      return res.status(200).json({
-        success: true,
-        message: genericResponse.message,
-        devResetToken: rawToken,
-        devResetLink: resetLink,
-      });
-    }
-    return res.status(200).json({
-      success: true,
-      message: genericResponse.message,
-    });
+    return res.status(200).json(genericResponse);
   } catch (e) {
     return next(e);
   }

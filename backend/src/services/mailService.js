@@ -200,13 +200,6 @@ function smtpErrorDetails(err) {
  * @returns {Promise<{ sent: true, messageId?: string } | { sent: false, reason: string, message?: string, smtp?: object }>}
  */
 async function sendPasswordResetEmail({ to, resetLink, expiresMinutes }) {
-  // eslint-disable-next-line no-console
-  console.log('[mail] sendPasswordResetEmail: received', {
-    to: String(to || '').trim(),
-    resetLinkLength: String(resetLink || '').length,
-    expiresMinutes,
-  });
-
   const cfg = getMailerConfig();
 
   if (!cfg.configured) {
@@ -225,78 +218,77 @@ async function sendPasswordResetEmail({ to, resetLink, expiresMinutes }) {
     return { sent: false, reason: 'invalid_recipient', message: 'Invalid recipient email.' };
   }
 
-  // eslint-disable-next-line no-console
-  console.log('[mail] creating transporter', {
-    provider: cfg.provider,
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.secure,
-    authUser: cfg.user,
-    from: cfg.from,
-  });
+  try {
+    const transporter = nodemailer.createTransport({
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
+      auth: { user: cfg.user, pass: cfg.pass },
+      ...(cfg.provider === 'gmail' && cfg.port === 587
+        ? { requireTLS: true, tls: { minVersion: 'TLSv1.2' } }
+        : {}),
+    });
 
-  const transporter = nodemailer.createTransport({
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.secure,
-    auth: { user: cfg.user, pass: cfg.pass },
-    ...(cfg.provider === 'gmail' && cfg.port === 587
-      ? { requireTLS: true, tls: { minVersion: 'TLSv1.2' } }
-      : {}),
-  });
+    const verifyFirst = String(process.env.MAIL_VERIFY_BEFORE_SEND || '').trim().toLowerCase() === 'true';
+    if (verifyFirst) {
+      try {
+        await transporter.verify();
+      } catch (verErr) {
+        // eslint-disable-next-line no-console
+        console.error('[mail] SMTP verify() failed', smtpErrorDetails(verErr));
+        if (verErr && verErr.stack) {
+          // eslint-disable-next-line no-console
+          console.error(verErr.stack);
+        }
+        return {
+          sent: false,
+          reason: 'smtp_verify_failed',
+          message: verErr.message || 'SMTP verify failed.',
+          smtp: smtpErrorDetails(verErr),
+        };
+      }
+    }
 
-  const verifyFirst = String(process.env.MAIL_VERIFY_BEFORE_SEND || '').trim().toLowerCase() === 'true';
-  if (verifyFirst) {
+    const { subject, text, html } = buildResetEmailContent({ resetLink, expiresMinutes });
+
     try {
+      const info = await transporter.sendMail({
+        from: cfg.from,
+        to: toAddr,
+        subject,
+        text,
+        html,
+      });
+
       // eslint-disable-next-line no-console
-      console.log('[mail] SMTP verify() starting…');
-      await transporter.verify();
+      console.log('[mail] password reset email sent', { messageId: info.messageId });
+
+      return { sent: true, messageId: info.messageId };
+    } catch (err) {
       // eslint-disable-next-line no-console
-      console.log('[mail] SMTP verify() OK');
-    } catch (verErr) {
-      // eslint-disable-next-line no-console
-      console.error('[mail] SMTP verify() failed', smtpErrorDetails(verErr));
+      console.error('[mail] sendMail failed', smtpErrorDetails(err));
+      if (err && err.stack) {
+        // eslint-disable-next-line no-console
+        console.error(err.stack);
+      }
       return {
         sent: false,
-        reason: 'smtp_verify_failed',
-        message: verErr.message || 'SMTP verify failed.',
-        smtp: smtpErrorDetails(verErr),
+        reason: 'send_failed',
+        message: err.message || 'SMTP rejected or dropped the message.',
+        smtp: smtpErrorDetails(err),
       };
     }
-  }
-
-  const { subject, text, html } = buildResetEmailContent({ resetLink, expiresMinutes });
-
-  // eslint-disable-next-line no-console
-  console.log('[mail] sending via sendMail', { from: cfg.from, to: toAddr, subject });
-
-  try {
-    const info = await transporter.sendMail({
-      from: cfg.from,
-      to: toAddr,
-      subject,
-      text,
-      html,
-    });
-
-    // eslint-disable-next-line no-console
-    console.log('[mail] sendMail success', {
-      messageId: info.messageId,
-      accepted: info.accepted,
-      rejected: info.rejected,
-      response: info.response,
-      to: toAddr,
-    });
-
-    return { sent: true, messageId: info.messageId };
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error('[mail] sendMail failure', smtpErrorDetails(err));
+    console.error('[mail] sendPasswordResetEmail unexpected error', err && err.message);
+    if (err && err.stack) {
+      // eslint-disable-next-line no-console
+      console.error(err.stack);
+    }
     return {
       sent: false,
-      reason: 'send_failed',
-      message: err.message || 'SMTP rejected or dropped the message.',
-      smtp: smtpErrorDetails(err),
+      reason: 'unexpected',
+      message: err.message || 'Unexpected error while sending email.',
     };
   }
 }

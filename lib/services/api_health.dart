@@ -19,13 +19,13 @@ class ApiHealth {
       final res = await http.get(uri, headers: headers).timeout(_timeout);
       final ok = res.statusCode == 200;
       if (!ok) {
-        ApiLog.network(
+        ApiLog.apiFailure(
           'GET $uri failed: HTTP ${res.statusCode} body=${res.body.length > 500 ? '${res.body.substring(0, 500)}…' : res.body}',
         );
       }
       return ok;
     } catch (e, st) {
-      ApiLog.network('GET $uri failed: $e', e, st);
+      ApiLog.apiFailure('GET $uri failed: $e', e, st);
       return false;
     }
   }
