@@ -1,4 +1,5 @@
 const OpenAI = require('openai');
+const { dynamicBestTime, dynamicAudio } = require('../utils/contentVariants');
 
 function getClient() {
   const key = (process.env.OPENAI_API_KEY || '').trim();
@@ -227,7 +228,7 @@ function normalizeHashtagBuckets(parsed) {
   };
 }
 
-function normalizePostAnalysis(parsed) {
+function normalizePostAnalysis(parsed, nicheForFallback = '') {
   let hashtags = parsed.hashtags;
   if (typeof hashtags === 'string') {
     hashtags = hashtags
@@ -247,21 +248,26 @@ function normalizePostAnalysis(parsed) {
     parsed.trending_audio ??
     parsed.trendingAudioSuggestion ??
     '';
+  const hook = String(parsed.hook || '').trim();
+  const caption = String(parsed.caption || '').trim();
+  const niche = String(nicheForFallback || '').trim();
+  let bestTime = String(parsed.bestTime || parsed.best_time || '').trim();
+  let audio = String(audioRaw || '').trim();
+  const ideaKey = caption || hook || 'post';
+  if (!bestTime) bestTime = dynamicBestTime(ideaKey, niche);
+  if (!audio) audio = dynamicAudio(ideaKey, niche);
   return {
-    hook: String(parsed.hook || '').trim(),
-    caption: String(parsed.caption || '').trim(),
+    hook,
+    caption,
     hashtags: hashtags.map(ensureHash).filter(Boolean).slice(0, 30),
-    bestTime: String(parsed.bestTime || parsed.best_time || '').trim(),
-    audio: String(audioRaw || '').trim(),
+    bestTime,
+    audio,
   };
 }
 
 function fallbackPostAnalysis(idea, hasImage, niche) {
   const hint = String(idea || (hasImage ? 'this visual' : 'your reel')).trim() || 'your reel';
   const nicheHint = String(niche || '').trim();
-  const audio = nicheHint
-    ? `Check the Reels audio tab for sounds trending in the “${nicheHint.slice(0, 48)}${nicheHint.length > 48 ? '…' : ''}” niche this week.`
-    : 'Try a sped-up trending phonk clip or “day in my life” soft piano — check Reels audio for what’s rising; add a profile niche for tighter picks.';
   return {
     hook: `POV: you’re about to blow up with ${hint.slice(0, 40)}${hint.length > 40 ? '…' : ''}`,
     caption: `This is your sign to post ✨\n\n${hint}\n\nComment “FIRE” if you’d watch the full story. #reels #fyp #viral #explorepage`,
@@ -277,10 +283,8 @@ function fallbackPostAnalysis(idea, hasImage, niche) {
       '#growth',
       '#instagood',
     ],
-    bestTime: nicheHint
-      ? `Weekday 6–9 PM in your audience’s timezone; test niche-specific peak times for ${nicheHint.slice(0, 32)}.`
-      : 'Weekday 6–9 PM in your audience’s main timezone; test Sat/Sun mornings for lifestyle niches.',
-    audio,
+    bestTime: dynamicBestTime(hint, nicheHint),
+    audio: dynamicAudio(hint, nicheHint),
   };
 }
 
@@ -292,7 +296,7 @@ async function analyzePost({ idea, imageBase64, niche, bio }) {
   try {
     const client = getClient();
     const sys =
-      'You analyze Instagram posts and Reels. Reply with ONLY valid JSON (no markdown, no code fences). Keys: hook (string), caption (string), hashtags (array of exactly 30 strings, each starting with #), bestTime (string), audio (string — trending audio suggestion). When the user message includes a concrete creator niche, reflect it consistently in hook tone, caption wording, all hashtags, posting-window reasoning, and audio suggestion.';
+      'You analyze Instagram posts and Reels. Reply with ONLY valid JSON (no markdown, no code fences). Keys: hook (string), caption (string), hashtags (array of exactly 30 strings, each starting with #), bestTime (string), audio (string — trending audio suggestion). bestTime and audio must be tailored to THIS specific idea (vary wording and reasoning; do not reuse the same generic posting window or audio line across different ideas). When the user message includes a concrete creator niche, reflect it consistently in hook tone, caption wording, all hashtags, posting-window reasoning, and audio suggestion.';
     const nicheLine = nicheStr || '(not set — treat as general / broad audience)';
     const ideaLine =
       ideaStr || (hasImage ? '(No text idea — infer from the attached image.)' : '(No idea text provided.)');
@@ -339,7 +343,7 @@ Idea: ${ideaLine}`;
 
     const text = completion.choices[0]?.message?.content?.trim() || '{}';
     const parsed = safeJsonParse(text);
-    return normalizePostAnalysis(parsed);
+    return normalizePostAnalysis(parsed, nicheStr);
   } catch (e) {
     if (isQuotaOrRateLimitError(e)) {
       // eslint-disable-next-line no-console
@@ -456,7 +460,7 @@ async function analyzeMediaPost({ niche, bio, userNotes, mediaContext }) {
   try {
     const client = getClient();
     const sys =
-      'You analyze Instagram Reels/posts. Reply with ONLY valid JSON (no markdown, no code fences). Keys: hook (string, a 3-second hook), caption (string), hashtags (array of exactly 30 strings, each starting with #), bestTime (string), audio (string — trending audio suggestion). The output MUST be specific to the described media (not generic). If niche is provided, align hook tone, caption voice, EVERY hashtag, bestTime advice, and audio pick to that niche.';
+      'You analyze Instagram Reels/posts. Reply with ONLY valid JSON (no markdown, no code fences). Keys: hook (string, a 3-second hook), caption (string), hashtags (array of exactly 30 strings, each starting with #), bestTime (string), audio (string — trending audio suggestion). The output MUST be specific to the described media (not generic). bestTime and audio must change when the media context or niche changes (no copy-paste generic lines). If niche is provided, align hook tone, caption voice, EVERY hashtag, bestTime advice, and audio pick to that niche.';
 
     const ctx = mediaContext || {};
     const ctxJson = JSON.stringify(
@@ -507,7 +511,7 @@ Hard rules:
 
     const text = completion.choices[0]?.message?.content?.trim() || '{}';
     const parsed = safeJsonParse(text);
-    return normalizePostAnalysis(parsed);
+    return normalizePostAnalysis(parsed, nicheStr);
   } catch (e) {
     if (isQuotaOrRateLimitError(e)) {
       // eslint-disable-next-line no-console

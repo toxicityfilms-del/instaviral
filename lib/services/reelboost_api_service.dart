@@ -70,10 +70,15 @@ class ReelboostApiService {
   Future<ViralAnalysis> analyzeViral({
     required String caption,
     String hashtags = '',
+    String niche = '',
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/viral/analyze',
-      data: {'caption': caption, 'hashtags': hashtags},
+      data: {
+        'caption': caption,
+        'hashtags': hashtags,
+        'niche': niche.trim(),
+      },
     );
     return _unwrapData(res, ViralAnalysis.fromJson);
   }

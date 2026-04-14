@@ -5,7 +5,11 @@ const { analyze } = require('../controllers/viralController');
 const router = Router();
 router.post(
   '/analyze',
-  [body('caption').isString().trim().notEmpty(), body('hashtags').optional().isString()],
+  [
+    body('caption').isString().trim().notEmpty(),
+    body('hashtags').optional().isString(),
+    body('niche').optional().isString().trim(),
+  ],
   analyze
 );
 

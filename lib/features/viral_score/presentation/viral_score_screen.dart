@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reelboost_ai/core/l10n/app_strings.dart';
 import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
@@ -35,8 +36,13 @@ class _ViralScoreScreenState extends ConsumerState<ViralScoreScreen> {
       _result = null;
     });
     final api = ref.read(reelboostApiProvider);
+    final niche = ref.read(authControllerProvider).asData?.value?.niche ?? '';
     try {
-      final r = await api.analyzeViral(caption: c, hashtags: _hashtags.text.trim());
+      final r = await api.analyzeViral(
+        caption: c,
+        hashtags: _hashtags.text.trim(),
+        niche: niche,
+      );
       setState(() => _result = r);
     } catch (e) {
       if (!mounted) return;
@@ -48,6 +54,7 @@ class _ViralScoreScreenState extends ConsumerState<ViralScoreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = ref.watch(appStringsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Viral score')),
       body: Container(
@@ -117,16 +124,40 @@ class _ViralScoreScreenState extends ConsumerState<ViralScoreScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  if (_result!.niche != null && _result!.niche!.trim().isNotEmpty) ...[
+                    SectionTitle(s.viralNicheLabel),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Text(
+                        _result!.niche!.trim(),
+                        style: const TextStyle(height: 1.35, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                  if (_result!.bestTime.trim().isNotEmpty) ...[
+                    SectionTitle(s.viralBestTimeTitle),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Text(_result!.bestTime, style: const TextStyle(height: 1.35)),
+                    ),
+                  ],
+                  if (_result!.audioSuggestion.trim().isNotEmpty) ...[
+                    SectionTitle(s.viralAudioSuggestionTitle),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Text(_result!.audioSuggestion, style: const TextStyle(height: 1.35)),
+                    ),
+                  ],
                   const SectionTitle('Improvements'),
                   ..._result!.suggestions.map(
-                    (s) => Padding(
+                    (item) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Icon(Icons.check_circle_outline, size: 18, color: AppTheme.accent2),
                           const SizedBox(width: 8),
-                          Expanded(child: Text(s, style: const TextStyle(height: 1.35))),
+                          Expanded(child: Text(item, style: const TextStyle(height: 1.35))),
                         ],
                       ),
                     ),

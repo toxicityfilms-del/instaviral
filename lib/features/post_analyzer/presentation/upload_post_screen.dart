@@ -816,6 +816,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
                   const SizedBox(height: 36),
                   _PostAnalyzerResultsSection(
                     result: _result!,
+                    strings: s,
                     copyPackLabel: s.actionCopyFullPack,
                     shareButtonLabel: s.actionSharePack,
                     remindButtonLabel: s.actionRemindPost,
@@ -1164,6 +1165,7 @@ class _MissingNicheWarning extends StatelessWidget {
 class _PostAnalyzerResultsSection extends StatelessWidget {
   const _PostAnalyzerResultsSection({
     required this.result,
+    required this.strings,
     required this.copyPackLabel,
     required this.shareButtonLabel,
     required this.remindButtonLabel,
@@ -1174,6 +1176,7 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
   });
 
   final PostAnalysisResult result;
+  final AppStrings strings;
   final String copyPackLabel;
   final String shareButtonLabel;
   final String remindButtonLabel;
@@ -1233,8 +1236,8 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
         const SizedBox(height: 20),
         _AccentStripeCard(
           icon: Icons.schedule_rounded,
-          title: 'Best time',
-          body: result.bestTime,
+          title: strings.viralBestTimeTitle,
+          body: result.bestTime.trim().isEmpty ? strings.postAnalyzeBestTimeFallback : result.bestTime,
           stripeGradient: const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -1244,8 +1247,8 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
         const SizedBox(height: 20),
         _AccentStripeCard(
           icon: Icons.graphic_eq_rounded,
-          title: 'Audio suggestion',
-          body: result.audio,
+          title: strings.viralAudioSuggestionTitle,
+          body: result.audio.trim().isEmpty ? strings.postAnalyzeAudioFallback : result.audio,
           stripeGradient: AppTheme.primaryGradient,
         ),
       ],

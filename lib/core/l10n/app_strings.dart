@@ -124,6 +124,11 @@ abstract class AppStrings {
   String get errorSession;
   String get errorNetwork;
   String get errorGenericAnalyze;
+  String get postAnalyzeBestTimeFallback;
+  String get postAnalyzeAudioFallback;
+  String get viralBestTimeTitle;
+  String get viralAudioSuggestionTitle;
+  String get viralNicheLabel;
 
   String get analyzeMediaCompareTitle;
 }
@@ -375,6 +380,18 @@ class AppStringsEn implements AppStrings {
   String get errorNetwork => 'Couldn’t reach the server. Check your connection and try again.';
   @override
   String get errorGenericAnalyze => 'Couldn’t analyze this post. Please try again.';
+  @override
+  String get postAnalyzeBestTimeFallback =>
+      'No timing detail in this response. Tap Analyze again after checking your connection.';
+  @override
+  String get postAnalyzeAudioFallback =>
+      'No audio suggestion in this response. Tap Analyze again after checking your connection.';
+  @override
+  String get viralBestTimeTitle => 'Best time';
+  @override
+  String get viralAudioSuggestionTitle => 'Audio suggestion';
+  @override
+  String get viralNicheLabel => 'Niche context';
 
   @override
   String get analyzeMediaCompareTitle =>
@@ -624,6 +641,18 @@ class AppStringsHi implements AppStrings {
   String get errorNetwork => 'सर्वर तक नहीं पहुँचे। नेट और API URL चेक करें।';
   @override
   String get errorGenericAnalyze => 'एनालाइज़ नहीं हो सका। दोबारा कोशिश करें।';
+  @override
+  String get postAnalyzeBestTimeFallback =>
+      'इस जवाब में टाइमिंग नहीं मिली। कनेक्शन चेक करके दोबारा एनालाइज़ करें।';
+  @override
+  String get postAnalyzeAudioFallback =>
+      'इस जवाब में ऑडियो सुझाव नहीं मिला। कनेक्शन चेक करके दोबारा एनालाइज़ करें।';
+  @override
+  String get viralBestTimeTitle => 'सबसे अच्छा समय';
+  @override
+  String get viralAudioSuggestionTitle => 'ऑडियो सुझाव';
+  @override
+  String get viralNicheLabel => 'निच संदर्भ';
 
   @override
   String get analyzeMediaCompareTitle =>
