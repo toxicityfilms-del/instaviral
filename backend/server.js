@@ -119,7 +119,7 @@ app.use('/api/profile', authMiddleware, profileRoutes);
 app.use('/api/post', authMiddleware, postRoutes);
 
 app.use('/api/usage', authMiddleware, usageRoutes);
-app.use('/api/user', authMiddleware, userRoutes);
+app.use('/api/user', userRoutes);
 
 app.use('/api/hashtag', authMiddleware, hashtagRoutes);
 app.use('/api/caption', authMiddleware, captionRoutes);
