@@ -113,6 +113,16 @@ class ReelboostApiService {
     return _unwrapData(res, UserModel.fromJson);
   }
 
+  Future<UserModel> upgradeUser({
+    required String userId,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/user/upgrade',
+      data: {'userId': userId},
+    );
+    return _unwrapData(res, UserModel.fromJson);
+  }
+
   Future<PostAnalyzeResponse> analyzePost({
     String? idea,
     String? imageBase64,
@@ -229,7 +239,10 @@ class ReelboostApiService {
   PostAnalyzeResponse _unwrapPostAnalyze(Response<Map<String, dynamic>> res) {
     final body = res.data;
     if (body == null || body['success'] != true) {
-      throw ApiException(body?['message']?.toString() ?? 'Request failed');
+      throw ApiException(
+        body?['message']?.toString() ?? 'Request failed',
+        body?['code']?.toString(),
+      );
     }
     final data = body['data'];
     if (data is! Map<String, dynamic>) {

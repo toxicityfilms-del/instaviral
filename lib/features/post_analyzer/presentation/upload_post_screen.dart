@@ -55,6 +55,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   Uint8List? _previewBytes;
 
   PostAnalysisResult? _result;
+  bool _resultIsPremium = false;
   bool _loading = false;
   bool _rewardLoading = false;
   bool _retryingReward = false;
@@ -413,6 +414,52 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     );
   }
 
+  Future<void> _showFreemiumLimitDialog(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        title: const Text('🔥 Daily Limit Reached'),
+        content: const Text('Upgrade to Pro for unlimited AI'),
+        actions: [
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await _upgradeToPremium();
+            },
+            child: const Text('Upgrade ₹99'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _upgradeToPremium() async {
+    final current = ref.read(authControllerProvider).asData?.value;
+    if (current == null) return;
+    try {
+      final upgraded = await ref.read(reelboostApiProvider).upgradeUser(userId: current.id);
+      final merged = upgraded.withPostAnalyzeUsage(
+        isPremium: true,
+        postAnalyzeLimit: null,
+        postAnalyzeRemaining: null,
+        postAnalyzeAdRewardsRemaining: null,
+      );
+      ref.read(authControllerProvider.notifier).applyUser(merged);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Premium activated successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+    }
+  }
+
   Future<void> _pickPostReminder() async {
     final strings = ref.read(appStringsProvider);
     await LocalNotificationsService.requestPermissionIfSupported();
@@ -484,6 +531,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
       if (!mounted) return;
       setState(() {
         _result = response.result;
+        _resultIsPremium = response.isPremium;
         _lastFailIdea = null;
       });
       AppHaptics.success();
@@ -524,6 +572,10 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+      if (e is ApiException && e.code == 'LIMIT_REACHED') {
+        await _showFreemiumLimitDialog(context);
+        return;
+      }
       final strings = ref.read(appStringsProvider);
       final msg = analyzePostErrorMessageLocalized(e, strings);
       final showRetry = isRetryableAnalyzeError(e);
@@ -553,6 +605,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(authControllerProvider).asData?.value;
+    final userIsFree = session?.isPremium == false;
     final niche = session?.niche.trim() ?? '';
     final hasNiche = niche.isNotEmpty;
     final atDailyLimit = _isAtDailyLimit(session);
@@ -816,6 +869,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
                   const SizedBox(height: 36),
                   _PostAnalyzerResultsSection(
                     result: _result!,
+                    isPremium: !userIsFree,
                     strings: s,
                     copyPackLabel: s.actionCopyFullPack,
                     shareButtonLabel: s.actionSharePack,
@@ -1165,6 +1219,7 @@ class _MissingNicheWarning extends StatelessWidget {
 class _PostAnalyzerResultsSection extends StatelessWidget {
   const _PostAnalyzerResultsSection({
     required this.result,
+    required this.isPremium,
     required this.strings,
     required this.copyPackLabel,
     required this.shareButtonLabel,
@@ -1176,6 +1231,7 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
   });
 
   final PostAnalysisResult result;
+  final bool isPremium;
   final AppStrings strings;
   final String copyPackLabel;
   final String shareButtonLabel;
@@ -1194,6 +1250,28 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
       children: [
         _ResultsScreenHeader(),
         const SizedBox(height: 14),
+        _GlassResultCard(
+          child: Row(
+            children: [
+              _IconOrb(icon: Icons.insights_rounded, colors: const [Color(0xFF22D3EE), Color(0xFF7C3AED)]),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Viral score', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${result.score} · Niche: ${result.niche.isEmpty ? "—" : result.niche}',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.84)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
         FilledButton.tonalIcon(
           onPressed: onCopyPack,
           icon: const Icon(Icons.copy_all_rounded),
@@ -1225,14 +1303,21 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 24),
-        _HookHeroCard(text: result.hook),
-        const SizedBox(height: 20),
-        _CaptionResultCard(
-          text: result.caption,
-          onCopy: onCopyCaption,
-        ),
-        const SizedBox(height: 20),
-        _HashtagsGridCard(tags: result.hashtags),
+        if (isPremium) ...[
+          _HookHeroCard(text: result.hook),
+          const SizedBox(height: 20),
+          _CaptionResultCard(
+            text: result.improvedCaption.isNotEmpty ? result.improvedCaption : result.caption,
+            onCopy: onCopyCaption,
+          ),
+          const SizedBox(height: 20),
+          _HashtagsGridCard(tags: result.betterHashtags.isNotEmpty ? result.betterHashtags : result.hashtags),
+          const SizedBox(height: 20),
+          _EngagementTipsCard(tips: result.engagementTips),
+        ] else ...[
+          const _ProLockedCard(),
+          const SizedBox(height: 20),
+        ],
         const SizedBox(height: 20),
         _AccentStripeCard(
           icon: Icons.schedule_rounded,
@@ -1700,6 +1785,58 @@ class _GlassResultCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
         child: child,
+      ),
+    );
+  }
+}
+
+class _ProLockedCard extends StatelessWidget {
+  const _ProLockedCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassResultCard(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        alignment: Alignment.center,
+        child: Column(
+          children: [
+            const Icon(Icons.lock_rounded, size: 32, color: Colors.white70),
+            const SizedBox(height: 8),
+            Text(
+              '🔒 Pro Feature',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EngagementTipsCard extends StatelessWidget {
+  const _EngagementTipsCard({required this.tips});
+
+  final List<String> tips;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassResultCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Engagement tips', style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          if (tips.isEmpty)
+            const Text('—')
+          else
+            ...tips.map(
+              (t) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('• $t', style: const TextStyle(height: 1.35)),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -32,6 +32,7 @@ const profileRoutes = require('./src/routes/profileRoutes');
 const postRoutes = require('./src/routes/postRoutes');
 const usageRoutes = require('./src/routes/usageRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
+const userRoutes = require('./src/routes/userRoutes');
 
 const app = express();
 
@@ -118,6 +119,7 @@ app.use('/api/profile', authMiddleware, profileRoutes);
 app.use('/api/post', authMiddleware, postRoutes);
 
 app.use('/api/usage', authMiddleware, usageRoutes);
+app.use('/api/user', authMiddleware, userRoutes);
 
 app.use('/api/hashtag', authMiddleware, hashtagRoutes);
 app.use('/api/caption', authMiddleware, captionRoutes);
@@ -128,6 +130,8 @@ app.use('/api/trends', authMiddleware, trendsRoutes);
 app.use(errorHandler);
 
 async function start() {
+  // eslint-disable-next-line no-console
+  console.log('NEW_DEPLOY_CHECK_14APR');
   await new Promise((resolve, reject) => {
     const server = app.listen(port, host, () => {
       // eslint-disable-next-line no-console
