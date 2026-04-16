@@ -288,11 +288,14 @@ function fallbackPostAnalysis(idea, hasImage, niche) {
   };
 }
 
-async function analyzePost({ idea, imageBase64, niche, bio }) {
+async function analyzePost({ idea, imageBase64, niche, bio, enableOpenAi = true }) {
   const hasImage = !!(imageBase64 && String(imageBase64).trim());
   const ideaStr = String(idea || '').trim();
   const nicheStr = String(niche || '').trim();
   const bioStr = String(bio || '').trim().slice(0, 400);
+  if (!enableOpenAi) {
+    return fallbackPostAnalysis(ideaStr, hasImage, nicheStr);
+  }
   try {
     const client = getClient();
     const sys =
@@ -378,7 +381,7 @@ function safeFileHint(file) {
   return `fileName=${name} mime=${mime} bytes=${bytes}`;
 }
 
-async function extractMediaContext({ imageDataUrl, file, niche, userNotes }) {
+async function extractMediaContext({ imageDataUrl, file, niche, userNotes, enableOpenAi = true }) {
   const nicheStr = String(niche || '').trim();
   const notes = String(userNotes || '').trim().slice(0, 600);
   const hasImage = !!(imageDataUrl && String(imageDataUrl).trim());
@@ -391,6 +394,26 @@ async function extractMediaContext({ imageDataUrl, file, niche, userNotes }) {
   }
 
   const hint = safeFileHint(file);
+  if (!enableOpenAi) {
+    return normalizeMediaContext({
+      description: notes || 'Uploaded media',
+      mood: '',
+      setting: '',
+      textOnScreen: '',
+      objects: [],
+      actions: [],
+      keywords: [
+        ...new Set(
+          [nicheStr, notes, hint]
+            .join(' ')
+            .split(/[\s,]+/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .slice(0, 18)
+        ),
+      ],
+    });
+  }
   try {
     const client = getClient();
     const sys =
@@ -452,11 +475,15 @@ Rules:
   }
 }
 
-async function analyzeMediaPost({ niche, bio, userNotes, mediaContext }) {
+async function analyzeMediaPost({ niche, bio, userNotes, mediaContext, enableOpenAi = true }) {
   const nicheStr = String(niche || '').trim();
   const bioStr = String(bio || '').trim().slice(0, 400);
   const notes = String(userNotes || '').trim().slice(0, 600);
 
+  if (!enableOpenAi) {
+    const hint = mediaContext?.description || notes || 'this post';
+    return fallbackPostAnalysis(hint, false, nicheStr);
+  }
   try {
     const client = getClient();
     const sys =

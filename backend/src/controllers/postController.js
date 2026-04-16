@@ -22,7 +22,13 @@ async function analyze(req, res, next) {
     const imageBase64 = req.body.imageBase64;
     const niche = req.body.niche;
     const bio = req.body.bio;
-    const data = await analyzePost({ idea, imageBase64, niche, bio });
+    const data = await analyzePost({
+      idea,
+      imageBase64,
+      niche,
+      bio,
+      enableOpenAi: gate.isPremium === true,
+    });
     const meta = await commitPostAnalyzeUsageAfterSuccess(id);
     if (meta.postAnalyzeRemaining != null) {
       res.set('X-RateLimit-Remaining', String(meta.postAnalyzeRemaining));
@@ -73,6 +79,7 @@ async function analyzeMedia(req, res, next) {
       file,
       niche,
       userNotes,
+      enableOpenAi: gate.isPremium === true,
     });
 
     const data = await analyzeMediaPost({
@@ -80,6 +87,7 @@ async function analyzeMedia(req, res, next) {
       bio,
       userNotes,
       mediaContext: ctx,
+      enableOpenAi: gate.isPremium === true,
     });
 
     const meta = await commitPostAnalyzeUsageAfterSuccess(id);

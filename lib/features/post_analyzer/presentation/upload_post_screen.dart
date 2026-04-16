@@ -23,9 +23,12 @@ import 'package:reelboost_ai/features/analyze_media/presentation/analyze_media_s
 import 'package:reelboost_ai/models/post_analysis_models.dart';
 import 'package:reelboost_ai/models/user_model.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:http/http.dart' as http;
+import 'package:reelboost_ai/services/api_service.dart';
 
 Future<void> _copyToClipboard(BuildContext context, String text, String message) async {
   AppHaptics.copy();
@@ -49,6 +52,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
 
   final _idea = TextEditingController();
   final _picker = ImagePicker();
+  late final Razorpay _razorpay;
 
   XFile? _imageFile;
   String? _imageDataUrl;
@@ -66,6 +70,10 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   @override
   void initState() {
     super.initState();
+    _razorpay = Razorpay();
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _onPaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _onPaymentError);
+    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _onExternalWallet);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _syncProfileFromServer();
       await _restorePendingRewardState();
@@ -88,6 +96,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   void dispose() {
     final ideaText = _idea.text;
     SharedPreferences.getInstance().then((p) => p.setString(_ideaDraftKey, ideaText));
+    _razorpay.clear();
     _idea.dispose();
     super.dispose();
   }
@@ -419,22 +428,63 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
       context: context,
       barrierDismissible: true,
       builder: (ctx) => AlertDialog(
-        title: const Text('🔥 Daily Limit Reached'),
-        content: const Text('Upgrade to Pro for unlimited AI'),
+        title: const Text('Limit Reached'),
+        content: const Text('Upgrade to Pro ₹199/month to continue'),
         actions: [
-          FilledButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await _upgradeToPremium();
-            },
-            child: const Text('Upgrade ₹99'),
-          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Close'),
           ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await openPayment();
+            },
+            child: const Text('Upgrade Now'),
+          ),
         ],
       ),
+    );
+  }
+
+  Future<void> openPayment() async {
+    final current = ref.read(authControllerProvider).asData?.value;
+    if (current == null) return;
+    final options = {
+      'key': 'rzp_test_your_key_here',
+      'amount': 19900,
+      'name': 'ReelBoost AI',
+      'description': 'Pro Upgrade ₹199/month',
+      'prefill': {
+        'email': current.email,
+        'name': current.name,
+      },
+      'notes': {'userId': current.id},
+      'theme': {'color': '#7C3AED'},
+    };
+    try {
+      _razorpay.open(options);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment init failed: $e')));
+    }
+  }
+
+  Future<void> _onPaymentSuccess(PaymentSuccessResponse response) async {
+    await upgradeUser();
+  }
+
+  void _onPaymentError(PaymentFailureResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Payment failed: ${response.message ?? response.code}')),
+    );
+  }
+
+  void _onExternalWallet(ExternalWalletResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('External wallet selected: ${response.walletName ?? "wallet"}')),
     );
   }
 
@@ -457,6 +507,56 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+    }
+  }
+
+  Future<void> upgradeUser() async {
+    final current = ref.read(authControllerProvider).asData?.value;
+    if (current == null) return;
+    try {
+      final uri = Uri.parse('${ApiService.baseUrl}/user/upgrade');
+      final res = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'userId': current.id}),
+      );
+
+      final ok = res.statusCode >= 200 && res.statusCode < 300;
+      if (!ok) {
+        String msg = 'Upgrade failed (${res.statusCode}).';
+        String? code;
+        try {
+          final decoded = jsonDecode(res.body);
+          if (decoded is Map<String, dynamic>) {
+            final m = decoded['message'] ?? decoded['error'] ?? decoded['detail'];
+            if (m != null) msg = m.toString();
+            final c = decoded['code'];
+            if (c != null) code = c.toString();
+          }
+        } catch (_) {}
+        // Keep it simple: just print failures for debugging.
+        // ignore: avoid_print
+        print('upgradeUser failed: $msg ${code ?? ''}'.trim());
+        return;
+      }
+
+      final merged = current.withPostAnalyzeUsage(
+        isPremium: true,
+        postAnalyzeLimit: null,
+        postAnalyzeRemaining: null,
+        postAnalyzeAdRewardsRemaining: null,
+      );
+      ref.read(authControllerProvider.notifier).applyUser(merged);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You are now Premium 🚀')),
+      );
+    } catch (e) {
+      // ignore: avoid_print
+      print('upgradeUser error: $e');
     }
   }
 
