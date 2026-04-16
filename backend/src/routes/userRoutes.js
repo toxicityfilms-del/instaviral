@@ -1,9 +1,8 @@
-const { Router } = require('express');
-const { body } = require('express-validator');
-const { upgrade } = require('../controllers/userController');
+const express = require('express');
+const { upgradeUser } = require('../controllers/userController');
 
-const router = Router();
+const router = express.Router();
 
-router.post('/upgrade', [body('userId').isString().trim().notEmpty()], upgrade);
+router.post('/upgrade', upgradeUser);
 
 module.exports = router;
