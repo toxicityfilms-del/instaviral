@@ -53,8 +53,8 @@ async function main() {
   const signupUsageOk =
     signupUser &&
     signupUser.isPremium === false &&
-    signupUser.postAnalyzeLimit === 5 &&
-    signupUser.postAnalyzeRemaining === 5 &&
+    signupUser.postAnalyzeLimit === 3 &&
+    signupUser.postAnalyzeRemaining === 3 &&
     signupUser.postAnalyzeAdRewardsRemaining === 5 &&
     ar &&
     ar.totalAdsWatched === 0 &&
@@ -90,7 +90,7 @@ async function main() {
     body.success &&
     loginUser &&
     loginUser.isPremium === false &&
-    loginUser.postAnalyzeLimit === 5 &&
+    loginUser.postAnalyzeLimit === 3 &&
     typeof loginUser.postAnalyzeRemaining === 'number';
   results.push(['POST /auth/login user usage fields', loginUsageOk]);
   console.log(loginUsageOk ? 'OK  login user usage' : 'FAIL login user usage', res.status, body.message || '');
@@ -102,7 +102,7 @@ async function main() {
     body.success &&
     body.data?.email === email &&
     body.data?.isPremium === false &&
-    body.data?.postAnalyzeLimit === 5 &&
+    body.data?.postAnalyzeLimit === 3 &&
     typeof body.data?.postAnalyzeRemaining === 'number';
   results.push(['GET /profile/me', profileGetOk]);
   console.log(profileGetOk ? 'OK  profile me' : 'FAIL profile me', res.status, body.message || '');
@@ -125,7 +125,7 @@ async function main() {
     body.data?.name === 'API Tester' &&
     body.data?.niche === 'testing' &&
     body.data?.isPremium === false &&
-    body.data?.postAnalyzeLimit === 5 &&
+    body.data?.postAnalyzeLimit === 3 &&
     typeof body.data?.postAnalyzeRemaining === 'number' &&
     (body.data?.instagram?.includes('instagram') || body.data?.instagramLink?.includes('instagram'));
   results.push(['POST /profile/save', profileSaveOk]);
@@ -254,13 +254,13 @@ async function main() {
   } else {
     if (
       body.meta?.isPremium !== false ||
-      body.meta?.postAnalyzeLimit !== 5 ||
-      body.meta?.postAnalyzeRemaining !== 4
+      body.meta?.postAnalyzeLimit !== 3 ||
+      body.meta?.postAnalyzeRemaining !== 2
     ) {
       postLimitSuiteOk = false;
       console.log('FAIL post analyze meta after 1st call', body.meta);
     }
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 2; i++) {
       res = await fetch(`${BASE}/post/analyze`, {
         method: 'POST',
         headers: auth,
@@ -271,7 +271,7 @@ async function main() {
         !res.ok ||
         !body.success ||
         !body.data?.hook ||
-        body.meta?.postAnalyzeRemaining !== 4 - i
+        body.meta?.postAnalyzeRemaining !== 2 - i
       ) {
         postLimitSuiteOk = false;
         console.log(`FAIL post analyze call ${i + 1}`, res.status, body.message || '', body.meta);
@@ -292,7 +292,7 @@ async function main() {
         typeof body.used === 'number';
       if (!limit403) {
         postLimitSuiteOk = false;
-        console.log('FAIL 6th POST /post/analyze expected 403 POST_ANALYZE_LIMIT', res.status, body);
+        console.log('FAIL 4th POST /post/analyze expected 403 POST_ANALYZE_LIMIT', res.status, body);
       } else {
         console.log('OK  post analyze daily limit enforced (403)');
       }
