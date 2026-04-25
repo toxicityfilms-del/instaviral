@@ -79,11 +79,13 @@ app.get('/', (req, res) => {
   res.send('Backend is Live 🚀');
 });
 
-// Railway / load balancer liveness (keep minimal JSON for health checks)
-app.get('/health', (req, res) => {
+// Health checks for both root and /api base URLs.
+const healthHandler = (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ ok: true });
-});
+  res.json({ success: true, status: 'ok' });
+};
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // Optional: detailed readiness (DB) for your own monitoring — not required by Railway
 app.get('/health/ready', (req, res) => {

@@ -23,12 +23,10 @@ import 'package:reelboost_ai/features/analyze_media/presentation/analyze_media_s
 import 'package:reelboost_ai/models/post_analysis_models.dart';
 import 'package:reelboost_ai/models/user_model.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:reelboost_ai/services/payments/razorpay_payment_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:http/http.dart' as http;
-import 'package:reelboost_ai/services/api_service.dart';
 
 Future<void> _copyToClipboard(BuildContext context, String text, String message) async {
   AppHaptics.copy();
@@ -52,7 +50,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
 
   final _idea = TextEditingController();
   final _picker = ImagePicker();
-  late final Razorpay _razorpay;
+  late final RazorpayPaymentService _payments;
 
   XFile? _imageFile;
   String? _imageDataUrl;
@@ -70,10 +68,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   @override
   void initState() {
     super.initState();
-    _razorpay = Razorpay();
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _onPaymentSuccess);
-    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _onPaymentError);
-    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _onExternalWallet);
+    _payments = RazorpayPaymentService()..init();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _syncProfileFromServer();
       await _restorePendingRewardState();
@@ -96,7 +91,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   void dispose() {
     final ideaText = _idea.text;
     SharedPreferences.getInstance().then((p) => p.setString(_ideaDraftKey, ideaText));
-    _razorpay.clear();
+    _payments.dispose();
     _idea.dispose();
     super.dispose();
   }
@@ -150,7 +145,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     if (!AdPolicy.enforcePostAnalyzeLimits(session)) return false;
     final r = session.postAnalyzeRemaining;
     if (r == null) return false;
-    final cap = session.postAnalyzeLimit ?? 5;
+    final cap = session.postAnalyzeLimit ?? 3;
     return r.clamp(0, cap) <= 0;
   }
 
@@ -209,9 +204,9 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
 
   /// Remaining and cap for free users; null if unknown (e.g. not synced yet).
   (int?, int) _freeUsageNumbers(UserModel? session) {
-    if (session == null) return (null, 5);
-    if (!AdPolicy.enforcePostAnalyzeLimits(session)) return (null, 5);
-    final cap = session.postAnalyzeLimit ?? 5;
+    if (session == null) return (null, 3);
+    if (!AdPolicy.enforcePostAnalyzeLimits(session)) return (null, 3);
+    final cap = session.postAnalyzeLimit ?? 3;
     final r = session.postAnalyzeRemaining?.clamp(0, cap);
     return (r, cap);
   }
@@ -372,7 +367,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
         content: Text(
           [
             if (serverDetail != null && serverDetail.trim().isNotEmpty) serverDetail.trim(),
-            'You’ve used all 5 free post analyses for today. Upgrade to Premium for unlimited analyses every day.',
+            'You’ve used all 3 free post analyses for today. Upgrade to Premium for unlimited analyses every day.',
           ].where((s) => s.isNotEmpty).join('\n\n'),
         ),
         actions: [
@@ -403,7 +398,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
           [
             if (detail != null && detail.isNotEmpty) detail,
             'Premium unlocks unlimited post analyses every day. '
-                'Free accounts are limited to 5 analyses per day.',
+                'Free accounts are limited to 3 analyses per day.',
           ].where((s) => s.isNotEmpty).join('\n\n'),
         ),
         actions: [
@@ -450,95 +445,34 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   Future<void> openPayment() async {
     final current = ref.read(authControllerProvider).asData?.value;
     if (current == null) return;
-    final options = {
-      'key': 'rzp_test_your_key_here',
-      'amount': 19900,
-      'name': 'ReelBoost AI',
-      'description': 'Pro Upgrade ₹199/month',
-      'prefill': {
-        'email': current.email,
-        'name': current.name,
-      },
-      'notes': {'userId': current.id},
-      'theme': {'color': '#7C3AED'},
-    };
     try {
-      _razorpay.open(options);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment init failed: $e')));
-    }
-  }
-
-  Future<void> _onPaymentSuccess(PaymentSuccessResponse response) async {
-    await upgradeUser();
-  }
-
-  void _onPaymentError(PaymentFailureResponse response) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Payment failed: ${response.message ?? response.code}')),
-    );
-  }
-
-  void _onExternalWallet(ExternalWalletResponse response) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('External wallet selected: ${response.walletName ?? "wallet"}')),
-    );
-  }
-
-  Future<void> _upgradeToPremium() async {
-    final current = ref.read(authControllerProvider).asData?.value;
-    if (current == null) return;
-    try {
-      final upgraded = await ref.read(reelboostApiProvider).upgradeUser(userId: current.id);
-      final merged = upgraded.withPostAnalyzeUsage(
-        isPremium: true,
-        postAnalyzeLimit: null,
-        postAnalyzeRemaining: null,
-        postAnalyzeAdRewardsRemaining: null,
-      );
-      ref.read(authControllerProvider.notifier).applyUser(merged);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Premium activated successfully')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
-    }
-  }
-
-  Future<void> upgradeUser() async {
-    final current = ref.read(authControllerProvider).asData?.value;
-    if (current == null) return;
-    try {
-      final uri = Uri.parse('${ApiService.baseUrl}/user/upgrade');
-      final res = await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'userId': current.id}),
+      final result = await _payments.buyPremium199(
+        userId: current.id,
+        email: current.email,
+        name: current.name,
       );
 
-      final ok = res.statusCode >= 200 && res.statusCode < 300;
+      if (!mounted) return;
+
+      if (result.status == PremiumPurchaseStatus.cancelled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Payment cancelled')),
+        );
+        return;
+      }
+      if (result.status == PremiumPurchaseStatus.failed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message ?? 'Payment failed')),
+        );
+        return;
+      }
+
+      final ok = await _payments.upgradeUserOnBackend(userId: current.id);
+      if (!mounted) return;
       if (!ok) {
-        String msg = 'Upgrade failed (${res.statusCode}).';
-        String? code;
-        try {
-          final decoded = jsonDecode(res.body);
-          if (decoded is Map<String, dynamic>) {
-            final m = decoded['message'] ?? decoded['error'] ?? decoded['detail'];
-            if (m != null) msg = m.toString();
-            final c = decoded['code'];
-            if (c != null) code = c.toString();
-          }
-        } catch (_) {}
-        // Keep it simple: just print failures for debugging.
-        // ignore: avoid_print
-        print('upgradeUser failed: $msg ${code ?? ''}'.trim());
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Upgrade failed. Please try again.')),
+        );
         return;
       }
 
@@ -549,14 +483,14 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
         postAnalyzeAdRewardsRemaining: null,
       );
       ref.read(authControllerProvider.notifier).applyUser(merged);
-
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You are now Premium 🚀')),
+        const SnackBar(content: Text('You are now Premium')),
       );
     } catch (e) {
-      // ignore: avoid_print
-      print('upgradeUser error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment failed: $e')),
+      );
     }
   }
 
@@ -995,7 +929,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   }
 }
 
-/// Prominent “X of 5” readout above the analyze button.
+/// Prominent “X of 3” readout above the analyze button.
 class _FreeUsageHighlight extends StatelessWidget {
   const _FreeUsageHighlight({
     required this.remaining,
@@ -1133,7 +1067,7 @@ class _UsageTierBanner extends StatelessWidget {
       );
     }
 
-    final lim = session.postAnalyzeLimit ?? 5;
+    final lim = session.postAnalyzeLimit ?? 3;
     final rem = session.postAnalyzeRemaining?.clamp(0, lim);
     if (rem == null) {
       return Container(
@@ -1144,7 +1078,7 @@ class _UsageTierBanner extends StatelessWidget {
           border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
         child: Text(
-          'Free plan: 5 post analyses per day (usage updates after profile sync).',
+          '3 free analyses per day (usage updates after profile sync).',
           style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 12.5, height: 1.35),
         ),
       );

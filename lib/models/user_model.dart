@@ -29,7 +29,7 @@ class UserModel {
   final String tiktokLink;
   final String niche;
   final bool isPremium;
-  /// Free plan daily cap (e.g. 5); null when [isPremium].
+  /// Free plan daily cap (e.g. 3); null when [isPremium].
   final int? postAnalyzeLimit;
   /// Remaining post analyses today for free users; null when [isPremium].
   final int? postAnalyzeRemaining;

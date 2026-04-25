@@ -23,7 +23,7 @@ class ApiException implements Exception {
 class PostAnalyzeLimitException implements Exception {
   PostAnalyzeLimitException({
     required this.message,
-    this.limit = 5,
+    this.limit = 3,
     this.used,
   });
 
@@ -207,7 +207,7 @@ class ReelboostApiService {
     final msg = raw['message']?.toString().trim();
     return PostAnalyzeLimitException(
       message: (msg != null && msg.isNotEmpty) ? msg : _defaultLimitMessage,
-      limit: (raw['limit'] as num?)?.toInt() ?? 5,
+      limit: (raw['limit'] as num?)?.toInt() ?? 3,
       used: (raw['used'] as num?)?.toInt(),
     );
   }
