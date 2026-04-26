@@ -2,8 +2,6 @@ const User = require('../models/User');
 const {
   FREE_POST_ANALYZE_DAILY,
   MAX_AD_REWARD_SLOTS,
-  AD_REWARD_COOLDOWN_MS,
-  REWARD_COOLDOWN_SECONDS,
   SUSPICIOUS_INVALID_AD_THRESHOLD,
 } = require('../config/usageEnv');
 const MAX_REWARD_CLAIM_IDS_PER_DAY = 20;
@@ -13,11 +11,11 @@ function utcDayString() {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Clamp stored usage count; max analyses today = base free + ad reward slots (env `MAX_AD_REWARDS_PER_DAY`). */
+/** Clamp stored usage count; free plan max analyses/day = base cap only (no ad bonuses). */
 function clampUsedCount(n) {
   const v = Number(n);
   if (Number.isNaN(v) || v < 0) return 0;
-  return Math.min(v, FREE_POST_ANALYZE_DAILY + MAX_AD_REWARD_SLOTS);
+  return Math.min(v, FREE_POST_ANALYZE_DAILY);
 }
 
 function rewardSlotsForDay(userDoc, today) {
@@ -28,32 +26,9 @@ function rewardSlotsForDay(userDoc, today) {
   return Math.min(r, MAX_AD_REWARD_SLOTS);
 }
 
-function effectiveLimitForDay(userDoc, today) {
-  return FREE_POST_ANALYZE_DAILY + rewardSlotsForDay(userDoc, today);
-}
-
-/**
- * All completion IDs we have ever recorded for this daily bucket (subdocs + legacy string arrays).
- * Used to reject duplicate adCompletionId and ensure one reward per ID.
- */
-function getClaimedCompletionIdSet(d) {
-  const set = new Set();
-  if (!d || typeof d !== 'object') return set;
-  if (Array.isArray(d.adRewardClaims)) {
-    for (const row of d.adRewardClaims) {
-      const id = row && row.adCompletionId != null ? String(row.adCompletionId).trim() : '';
-      if (id.length > 0) set.add(id);
-    }
-  }
-  for (const key of ['adCompletionIds', 'rewardClaimIds']) {
-    const arr = d[key];
-    if (!Array.isArray(arr)) continue;
-    for (const raw of arr) {
-      const id = raw == null ? '' : String(raw).trim();
-      if (id.length > 0) set.add(id);
-    }
-  }
-  return set;
+/** Free tier: fixed daily cap (premium uses assert path without counting). */
+function effectiveLimitForDay() {
+  return FREE_POST_ANALYZE_DAILY;
 }
 
 function trimRewardClaimsArray(claims) {
@@ -84,18 +59,6 @@ function normalizeAdRewardAnalytics(d) {
       limit: Math.max(0, Math.floor(Number(rj.limit)) || 0),
     },
   };
-}
-
-/** Latest successful claim time for this daily bucket (ms since epoch), or 0 if none. */
-function lastAdRewardClaimAtMs(d) {
-  if (!d || !Array.isArray(d.adRewardClaims)) return 0;
-  let max = 0;
-  for (const row of d.adRewardClaims) {
-    if (!row || row.claimedAt == null) continue;
-    const t = new Date(row.claimedAt).getTime();
-    if (Number.isFinite(t) && t > max) max = t;
-  }
-  return max;
 }
 
 function normalizeSuspiciousDailyFields(d) {
@@ -154,7 +117,7 @@ function buildPostAnalyzeUsageMeta(userDoc) {
       isPremium: false,
       postAnalyzeLimit: FREE_POST_ANALYZE_DAILY,
       postAnalyzeRemaining: FREE_POST_ANALYZE_DAILY,
-      postAnalyzeAdRewardsRemaining: MAX_AD_REWARD_SLOTS,
+      postAnalyzeAdRewardsRemaining: 0,
       adRewardAnalytics: defaultAdRewardAnalytics(),
       adRewardSuspiciousFlag: false,
       adRewardsBlockedSuspicious: false,
@@ -175,15 +138,14 @@ function buildPostAnalyzeUsageMeta(userDoc) {
   }
   const today = utcDayString();
   const d = userDoc.postAnalyzeDaily || {};
-  const rewardSlots = rewardSlotsForDay(userDoc, today);
-  const effectiveLimit = FREE_POST_ANALYZE_DAILY + rewardSlots;
+  const freeLimit = FREE_POST_ANALYZE_DAILY;
   const usedToday = d.day === today ? clampUsedCount(d.count) : 0;
   const sus = d.day === today ? normalizeSuspiciousDailyFields(d) : { invalidAdCompletionCount: 0, adRewardsBlockedSuspicious: false };
   return {
     isPremium: false,
-    postAnalyzeLimit: effectiveLimit,
-    postAnalyzeRemaining: Math.max(0, effectiveLimit - usedToday),
-    postAnalyzeAdRewardsRemaining: Math.max(0, MAX_AD_REWARD_SLOTS - rewardSlots),
+    postAnalyzeLimit: freeLimit,
+    postAnalyzeRemaining: Math.max(0, freeLimit - usedToday),
+    postAnalyzeAdRewardsRemaining: 0,
     adRewardAnalytics:
       d.day === today ? normalizeAdRewardAnalytics(d) : defaultAdRewardAnalytics(),
     adRewardSuspiciousFlag: userDoc.adRewardSuspiciousFlag === true,
@@ -211,7 +173,7 @@ async function assertPostAnalyzeAllowed(userId) {
   const today = utcDayString();
   const d = user.postAnalyzeDaily || { day: '', count: 0, rewardSlots: 0 };
   const used = d.day === today ? clampUsedCount(d.count) : 0;
-  const eff = effectiveLimitForDay(user, today);
+  const eff = effectiveLimitForDay();
   if (used >= eff) {
     return {
       ok: false,
@@ -219,7 +181,7 @@ async function assertPostAnalyzeAllowed(userId) {
       body: {
         success: false,
         code: 'POST_ANALYZE_LIMIT',
-        message: `Free plan allows ${eff} post analyses today (including ad bonuses). Upgrade to Premium for unlimited analyses.`,
+        message: `Free plan allows ${eff} post analyses per day. Upgrade to Premium for unlimited analyses.`,
         limit: eff,
         used,
       },
@@ -238,7 +200,7 @@ async function commitPostAnalyzeUsageAfterSuccess(userId) {
       isPremium: false,
       postAnalyzeLimit: FREE_POST_ANALYZE_DAILY,
       postAnalyzeRemaining: 0,
-      postAnalyzeAdRewardsRemaining: MAX_AD_REWARD_SLOTS,
+      postAnalyzeAdRewardsRemaining: 0,
       adRewardAnalytics: defaultAdRewardAnalytics(),
       adRewardSuspiciousFlag: false,
       adRewardsBlockedSuspicious: false,
@@ -261,7 +223,7 @@ async function commitPostAnalyzeUsageAfterSuccess(userId) {
   const today = utcDayString();
   const prev = user.postAnalyzeDaily || { day: '', count: 0, rewardSlots: 0 };
   const rewardSlots = prev.day === today ? rewardSlotsForDay(user, today) : 0;
-  const eff = FREE_POST_ANALYZE_DAILY + rewardSlots;
+  const eff = FREE_POST_ANALYZE_DAILY;
   let used = prev.day === today ? clampUsedCount(prev.count) : 0;
   used = Math.min(used + 1, eff);
   const keptClaims = rewardClaimsForCommit(prev, today);
@@ -279,7 +241,7 @@ async function commitPostAnalyzeUsageAfterSuccess(userId) {
     isPremium: false,
     postAnalyzeLimit: eff,
     postAnalyzeRemaining: remaining,
-    postAnalyzeAdRewardsRemaining: Math.max(0, MAX_AD_REWARD_SLOTS - rewardSlots),
+    postAnalyzeAdRewardsRemaining: meta.postAnalyzeAdRewardsRemaining,
     adRewardAnalytics: meta.adRewardAnalytics,
     adRewardSuspiciousFlag: meta.adRewardSuspiciousFlag,
     adRewardsBlockedSuspicious: meta.adRewardsBlockedSuspicious,
@@ -288,7 +250,8 @@ async function commitPostAnalyzeUsageAfterSuccess(userId) {
 }
 
 /**
- * Grant +1 effective post-analyze slot for today by watching a rewarded ad (max 3/day). Premium: no-op / error.
+ * Free plan: rewarded ads do not extend the daily cap (returns AD_REWARD_NOT_AVAILABLE after payload validation).
+ * Premium: rejected (no ad rewards). Invalid payloads still count toward suspicious-ad thresholds.
  */
 async function grantAdRewardSlot(userId, { completionId, completedAtMs } = {}) {
   const user = await User.findById(userId);
@@ -364,61 +327,16 @@ async function grantAdRewardSlot(userId, { completionId, completedAtMs } = {}) {
     };
   }
 
-  d.adRewardAnalytics = normalizeAdRewardAnalytics(d);
-  d.adRewardAnalytics.totalAdsWatched += 1;
-
-  const claimedIds = getClaimedCompletionIdSet(d);
-  if (claimedIds.has(payload.completionId)) {
-    d.adRewardAnalytics.rewardsRejected.duplicate += 1;
-    user.postAnalyzeDaily = d;
-    await user.save();
-    const fresh = await User.findById(userId);
-    return { ok: true, alreadyClaimed: true, meta: buildPostAnalyzeUsageMeta(fresh) };
-  }
-  const lastClaimMs = lastAdRewardClaimAtMs(d);
-  if (lastClaimMs > 0 && Date.now() - lastClaimMs < AD_REWARD_COOLDOWN_MS) {
-    d.adRewardAnalytics.rewardsRejected.cooldown += 1;
-    user.postAnalyzeDaily = d;
-    await user.save();
-    return {
-      ok: false,
-      status: 400,
-      body: {
-        success: false,
-        code: 'REWARD_COOLDOWN',
-        message: 'Please wait before claiming another ad reward.',
-      },
-    };
-  }
-  const rs = rewardSlotsForDay({ postAnalyzeDaily: d }, today);
-  if (rs >= MAX_AD_REWARD_SLOTS) {
-    d.adRewardAnalytics.rewardsRejected.limit += 1;
-    user.postAnalyzeDaily = d;
-    await user.save();
-    return {
-      ok: false,
-      status: 400,
-      body: {
-        success: false,
-        code: 'MAX_AD_REWARD_REACHED',
-        message: 'Maximum rewarded ad claims for today reached. Try again tomorrow or upgrade to Premium.',
-      },
-    };
-  }
-  d.adRewardAnalytics.rewardsGranted += 1;
-  const priorClaims = Array.isArray(d.adRewardClaims) ? [...d.adRewardClaims] : [];
-  priorClaims.push({
-    adCompletionId: payload.completionId,
-    claimedAt: new Date(),
-  });
-  d.rewardSlots = rs + 1;
-  d.day = today;
-  if (d.count == null) d.count = 0;
-  d.adRewardClaims = trimRewardClaimsArray(priorClaims);
-  user.postAnalyzeDaily = d;
-  await user.save();
-  const fresh = await User.findById(userId);
-  return { ok: true, alreadyClaimed: false, meta: buildPostAnalyzeUsageMeta(fresh) };
+  return {
+    ok: false,
+    status: 400,
+    body: {
+      success: false,
+      code: 'AD_REWARD_NOT_AVAILABLE',
+      message:
+        'Rewarded ads do not add post analyses on the free plan. Upgrade to Premium for unlimited analyses.',
+    },
+  };
 }
 
 /**
@@ -448,8 +366,6 @@ async function resetSuspiciousAdFlags(userId) {
 module.exports = {
   FREE_POST_ANALYZE_DAILY,
   MAX_AD_REWARD_SLOTS,
-  AD_REWARD_COOLDOWN_MS,
-  REWARD_COOLDOWN_SECONDS,
   SUSPICIOUS_INVALID_AD_THRESHOLD,
   defaultAdRewardAnalytics,
   normalizeAdRewardAnalytics,

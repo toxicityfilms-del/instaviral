@@ -55,7 +55,7 @@ async function main() {
     signupUser.isPremium === false &&
     signupUser.postAnalyzeLimit === 3 &&
     signupUser.postAnalyzeRemaining === 3 &&
-    signupUser.postAnalyzeAdRewardsRemaining === 5 &&
+    signupUser.postAnalyzeAdRewardsRemaining === 0 &&
     ar &&
     ar.totalAdsWatched === 0 &&
     ar.rewardsGranted === 0 &&

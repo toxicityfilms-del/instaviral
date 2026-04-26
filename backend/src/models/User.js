@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema(
     adRewardSuspiciousFlag: { type: Boolean, default: false },
     postAnalyzeDaily: {
       day: { type: String, default: '' },
-      /** Max analyses/day = free tier + env `MAX_AD_REWARDS_PER_DAY` (cap 50 in app config). */
+      /** Uses per UTC day for free tier (cap = free daily limit; premium ignores). */
       count: { type: Number, default: 0, min: 0, max: 60 },
       rewardSlots: { type: Number, default: 0, min: 0, max: 50 },
       /** @deprecated legacy string ids — use adRewardClaims */
