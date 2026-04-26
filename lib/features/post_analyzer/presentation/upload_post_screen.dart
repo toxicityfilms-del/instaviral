@@ -70,6 +70,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     super.initState();
     _payments = RazorpayPaymentService()..init();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _sanitizeStaleFreeLimitCache();
       await _syncProfileFromServer();
       await _restorePendingRewardState();
       final prefs = await SharedPreferences.getInstance();
@@ -85,6 +86,24 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
         setState(() => _lastFailIdea = fail);
       }
     });
+  }
+
+  void _sanitizeStaleFreeLimitCache() {
+    final session = ref.read(authControllerProvider).asData?.value;
+    if (session == null || AdPolicy.isPremium(session)) return;
+    final staleLimit = session.postAnalyzeLimit == 5;
+    final staleRemaining = session.postAnalyzeRemaining == 5;
+    if (!staleLimit && !staleRemaining) return;
+    ref.read(authControllerProvider.notifier).applyUser(
+          session.copyWith(
+            postAnalyzeLimit: staleLimit ? 3 : session.postAnalyzeLimit,
+            postAnalyzeRemaining: staleRemaining
+                ? 3
+                : (session.postAnalyzeRemaining == null
+                    ? null
+                    : session.postAnalyzeRemaining!.clamp(0, 3)),
+          ),
+        );
   }
 
   @override
@@ -144,8 +163,8 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     if (session == null) return false;
     if (!AdPolicy.enforcePostAnalyzeLimits(session)) return false;
     final r = session.postAnalyzeRemaining;
-    if (r == null) return false;
     final cap = session.postAnalyzeLimit ?? 3;
+    if (r == null) return false;
     return r.clamp(0, cap) <= 0;
   }
 
@@ -202,12 +221,14 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     if (mounted) setState(() {});
   }
 
-  /// Remaining and cap for free users; null if unknown (e.g. not synced yet).
-  (int?, int) _freeUsageNumbers(UserModel? session) {
-    if (session == null) return (null, 3);
-    if (!AdPolicy.enforcePostAnalyzeLimits(session)) return (null, 3);
+  /// Remaining and cap for free users; null values mean server usage isn't synced yet.
+  (int?, int?) _freeUsageNumbers(UserModel? session) {
+    if (session == null) return (null, null);
+    if (!AdPolicy.enforcePostAnalyzeLimits(session)) return (null, null);
     final cap = session.postAnalyzeLimit ?? 3;
-    final r = session.postAnalyzeRemaining?.clamp(0, cap);
+    final r = (session.postAnalyzeRemaining != null && cap != null)
+        ? session.postAnalyzeRemaining!.clamp(0, cap)
+        : session.postAnalyzeRemaining;
     return (r, cap);
   }
 
@@ -357,7 +378,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   }
 
   /// Shown when the user hits the server limit (403) or when already at 0 and they try to analyze.
-  Future<void> _showDailyLimitDialog(BuildContext context, {String? serverDetail}) {
+  Future<void> _showDailyLimitDialog(BuildContext context, {String? serverDetail, int? limit}) {
     return showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -367,7 +388,9 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
         content: Text(
           [
             if (serverDetail != null && serverDetail.trim().isNotEmpty) serverDetail.trim(),
-            'You’ve used all 3 free post analyses for today. Upgrade to Premium for unlimited analyses every day.',
+            limit != null
+                ? 'You’ve used all $limit free post analyses for today. Upgrade to Premium for unlimited analyses every day.'
+                : 'You’ve used all your free post analyses for today. Upgrade to Premium for unlimited analyses every day.',
           ].where((s) => s.isNotEmpty).join('\n\n'),
         ),
         actions: [
@@ -398,7 +421,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
           [
             if (detail != null && detail.isNotEmpty) detail,
             'Premium unlocks unlimited post analyses every day. '
-                'Free accounts are limited to 3 analyses per day.',
+                'Free accounts have a daily analysis limit.',
           ].where((s) => s.isNotEmpty).join('\n\n'),
         ),
         actions: [
@@ -593,12 +616,16 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
       }
     } on PostAnalyzeLimitException catch (e) {
       if (!mounted) return;
-      await _showDailyLimitDialog(context, serverDetail: e.message);
+      await _showDailyLimitDialog(
+        context,
+        serverDetail: e.message,
+        limit: e.limit,
+      );
       if (session != null) {
         ref.read(authControllerProvider.notifier).applyUser(
               session.withPostAnalyzeUsage(
                 isPremium: false,
-                postAnalyzeLimit: e.limit,
+                postAnalyzeLimit: e.limit ?? session.postAnalyzeLimit,
                 postAnalyzeRemaining: 0,
                 postAnalyzeAdRewardsRemaining: session.postAnalyzeAdRewardsRemaining,
               ),
@@ -607,7 +634,11 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     } catch (e) {
       if (!mounted) return;
       if (e is ApiException && e.code == 'LIMIT_REACHED') {
-        await _showFreemiumLimitDialog(context);
+        await _showDailyLimitDialog(
+          context,
+          serverDetail: 'You have used your 3 free analyses today',
+          limit: session?.postAnalyzeLimit,
+        );
         return;
       }
       final strings = ref.read(appStringsProvider);
@@ -929,7 +960,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   }
 }
 
-/// Prominent “X of 3” readout above the analyze button.
+/// Prominent free-usage readout above the analyze button.
 class _FreeUsageHighlight extends StatelessWidget {
   const _FreeUsageHighlight({
     required this.remaining,
@@ -938,18 +969,17 @@ class _FreeUsageHighlight extends StatelessWidget {
   });
 
   final int? remaining;
-  final int cap;
+  final int? cap;
   final bool atLimit;
 
   @override
   Widget build(BuildContext context) {
-    final r = remaining?.clamp(0, cap);
+    final displayLimit = 3;
+    final displayRemaining = remaining == null ? 3 : remaining.clamp(0, 3);
     return Semantics(
-      label: r == null
-          ? 'Free plan usage, amount syncing'
-          : atLimit
-              ? 'Daily limit reached. Zero of $cap analyses remaining'
-              : '$r of $cap analyses remaining today',
+      label: atLimit
+          ? 'Daily limit reached. Zero of $displayLimit analyses remaining'
+          : '$displayRemaining of $displayLimit analyses remaining today',
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         decoration: BoxDecoration(
@@ -977,14 +1007,14 @@ class _FreeUsageHighlight extends StatelessWidget {
               textBaseline: TextBaseline.alphabetic,
               children: [
                 Text(
-                  r == null ? '—' : '$r',
+                  '$displayRemaining',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w800,
                         color: Colors.white.withValues(alpha: 0.96),
                       ),
                 ),
                 Text(
-                  ' of $cap',
+                  ' of $displayLimit',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: Colors.white.withValues(alpha: 0.52),
@@ -992,11 +1022,7 @@ class _FreeUsageHighlight extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  r == null
-                      ? 'Syncing…'
-                      : atLimit
-                          ? 'Limit reached'
-                          : 'remaining',
+                  atLimit ? 'Limit reached' : 'remaining',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.48),
                     fontSize: 13,
@@ -1005,24 +1031,25 @@ class _FreeUsageHighlight extends StatelessWidget {
                 ),
               ],
             ),
-            if (r != null) ...[
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(5),
-                child: LinearProgressIndicator(
-                  value: cap > 0 ? r / cap : 0,
-                  minHeight: 7,
-                  backgroundColor: Colors.white.withValues(alpha: 0.08),
-                  color: atLimit ? const Color(0xFFF87171) : AppTheme.accent2.withValues(alpha: 0.9),
-                ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: LinearProgressIndicator(
+                value: displayLimit > 0 ? displayRemaining / displayLimit : 0,
+                minHeight: 7,
+                backgroundColor: Colors.white.withValues(alpha: 0.08),
+                color: atLimit ? const Color(0xFFF87171) : AppTheme.accent2.withValues(alpha: 0.9),
               ),
-            ] else ...[
-              const SizedBox(height: 10),
-              Text(
-                'Usage appears after you sign in or refresh your profile.',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.42), fontSize: 12.5, height: 1.35),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'DEBUG LIMIT = 3',
+              style: TextStyle(
+                color: Colors.amber.shade300,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
               ),
-            ],
+            ),
           ],
         ),
       ),
@@ -1067,7 +1094,21 @@ class _UsageTierBanner extends StatelessWidget {
       );
     }
 
-    final lim = session.postAnalyzeLimit ?? 3;
+    final lim = session.postAnalyzeLimit;
+    if (lim == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: Colors.white.withValues(alpha: 0.05),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: Text(
+          'Free plan usage updates after profile sync.',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 12.5, height: 1.35),
+        ),
+      );
+    }
     final rem = session.postAnalyzeRemaining?.clamp(0, lim);
     if (rem == null) {
       return Container(
@@ -1078,7 +1119,7 @@ class _UsageTierBanner extends StatelessWidget {
           border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
         child: Text(
-          '3 free analyses per day (usage updates after profile sync).',
+          'Free plan: $lim free analyses per day (usage updates after profile sync).',
           style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 12.5, height: 1.35),
         ),
       );

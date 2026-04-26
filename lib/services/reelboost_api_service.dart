@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart';
 import 'package:reelboost_ai/models/caption_models.dart';
@@ -23,12 +24,12 @@ class ApiException implements Exception {
 class PostAnalyzeLimitException implements Exception {
   PostAnalyzeLimitException({
     required this.message,
-    this.limit = 3,
+    this.limit,
     this.used,
   });
 
   final String message;
-  final int limit;
+  final int? limit;
   final int? used;
 
   @override
@@ -202,12 +203,16 @@ class ReelboostApiService {
     if (e.response?.statusCode != 403) return null;
     final raw = _dioResponseDataMap(e.response?.data);
     if (raw == null) return null;
+    developer.log(
+      'POST_ANALYZE_LIMIT raw response: $raw',
+      name: 'ReelboostApiService',
+    );
     final code = raw['code']?.toString();
     if (code == null || code.toUpperCase() != 'POST_ANALYZE_LIMIT') return null;
     final msg = raw['message']?.toString().trim();
     return PostAnalyzeLimitException(
       message: (msg != null && msg.isNotEmpty) ? msg : _defaultLimitMessage,
-      limit: (raw['limit'] as num?)?.toInt() ?? 3,
+      limit: (raw['limit'] as num?)?.toInt(),
       used: (raw['used'] as num?)?.toInt(),
     );
   }
@@ -258,12 +263,20 @@ class ReelboostApiService {
       lim = (meta['postAnalyzeLimit'] as num?)?.toInt();
       rem = (meta['postAnalyzeRemaining'] as num?)?.toInt();
       adRem = (meta['postAnalyzeAdRewardsRemaining'] as num?)?.toInt();
+      developer.log(
+        'post/analyze meta response: isPremium=$isPremium, limit=$lim, remaining=$rem, adRewardsRemaining=$adRem',
+        name: 'ReelboostApiService',
+      );
     }
     if (!isPremium) {
       final limH = _rateLimitIntHeader(res, 'x-ratelimit-limit');
       final remH = _rateLimitIntHeader(res, 'x-ratelimit-remaining');
       if (limH != null) lim = limH;
       if (remH != null) rem = remH;
+      developer.log(
+        'post/analyze headers: x-ratelimit-limit=$limH, x-ratelimit-remaining=$remH, effectiveLimit=$lim, effectiveRemaining=$rem',
+        name: 'ReelboostApiService',
+      );
     }
     return PostAnalyzeResponse(
       result: PostAnalysisResult.fromJson(data),
