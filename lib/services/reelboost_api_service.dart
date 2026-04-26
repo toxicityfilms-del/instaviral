@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:reelboost_ai/models/caption_models.dart';
 import 'package:reelboost_ai/models/post_analysis_models.dart';
 
@@ -114,12 +115,19 @@ class ReelboostApiService {
     return _unwrapData(res, UserModel.fromJson);
   }
 
-  Future<UserModel> upgradeUser({
-    required String userId,
+  /// Server uses JWT subject only; requires verified Razorpay signature (or dev bypass on backend).
+  Future<UserModel> upgradeAfterRazorpayPayment({
+    required String razorpayOrderId,
+    required String razorpayPaymentId,
+    required String razorpaySignature,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/user/upgrade',
-      data: {'userId': userId},
+      data: {
+        'razorpay_order_id': razorpayOrderId,
+        'razorpay_payment_id': razorpayPaymentId,
+        'razorpay_signature': razorpaySignature,
+      },
     );
     return _unwrapData(res, UserModel.fromJson);
   }
@@ -203,10 +211,12 @@ class ReelboostApiService {
     if (e.response?.statusCode != 403) return null;
     final raw = _dioResponseDataMap(e.response?.data);
     if (raw == null) return null;
-    developer.log(
-      'POST_ANALYZE_LIMIT raw response: $raw',
-      name: 'ReelboostApiService',
-    );
+    if (kDebugMode) {
+      developer.log(
+        'POST_ANALYZE_LIMIT response code=${raw['code']}',
+        name: 'ReelboostApiService',
+      );
+    }
     final code = raw['code']?.toString();
     if (code == null || code.toUpperCase() != 'POST_ANALYZE_LIMIT') return null;
     final msg = raw['message']?.toString().trim();
@@ -263,20 +273,24 @@ class ReelboostApiService {
       lim = (meta['postAnalyzeLimit'] as num?)?.toInt();
       rem = (meta['postAnalyzeRemaining'] as num?)?.toInt();
       adRem = (meta['postAnalyzeAdRewardsRemaining'] as num?)?.toInt();
-      developer.log(
-        'post/analyze meta response: isPremium=$isPremium, limit=$lim, remaining=$rem, adRewardsRemaining=$adRem',
-        name: 'ReelboostApiService',
-      );
+      if (kDebugMode) {
+        developer.log(
+          'post/analyze meta: isPremium=$isPremium, limit=$lim, remaining=$rem',
+          name: 'ReelboostApiService',
+        );
+      }
     }
     if (!isPremium) {
       final limH = _rateLimitIntHeader(res, 'x-ratelimit-limit');
       final remH = _rateLimitIntHeader(res, 'x-ratelimit-remaining');
       if (limH != null) lim = limH;
       if (remH != null) rem = remH;
-      developer.log(
-        'post/analyze headers: x-ratelimit-limit=$limH, x-ratelimit-remaining=$remH, effectiveLimit=$lim, effectiveRemaining=$rem',
-        name: 'ReelboostApiService',
-      );
+      if (kDebugMode) {
+        developer.log(
+          'post/analyze rate headers: limit=$limH, remaining=$remH',
+          name: 'ReelboostApiService',
+        );
+      }
     }
     return PostAnalyzeResponse(
       result: PostAnalysisResult.fromJson(data),

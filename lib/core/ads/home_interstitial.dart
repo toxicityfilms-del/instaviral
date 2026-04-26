@@ -9,7 +9,7 @@ const _kHomeVisitCount = 'admob_home_visit_count_v1';
 /// Shows a full-screen ad at most every 4th home visit (not on visits 1–3) for free users only.
 Future<void> maybeShowHomeInterstitial(UserModel? user) async {
   if (!AdPolicy.showAds(user)) return;
-  if (!supportsMobileAds) return;
+  if (!supportsMobileAdsForBuild) return;
   final prefs = await SharedPreferences.getInstance();
   final n = (prefs.getInt(_kHomeVisitCount) ?? 0) + 1;
   await prefs.setInt(_kHomeVisitCount, n);

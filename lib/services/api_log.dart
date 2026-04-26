@@ -13,8 +13,9 @@ class ApiLog {
     developer.log(message, name: _name, error: error, stackTrace: stackTrace);
   }
 
-  /// Connection / HTTP failures — logged in debug and release (logcat / Xcode console).
+  /// Connection / HTTP failures — debug only (avoid leaking URLs or payloads in release logs).
   static void apiFailure(String message, [Object? error, StackTrace? stackTrace]) {
+    if (!kDebugMode) return;
     developer.log(message, name: _name, error: error, stackTrace: stackTrace);
   }
 

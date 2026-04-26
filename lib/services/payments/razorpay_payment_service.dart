@@ -1,32 +1,45 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:http/http.dart' as http;
 import 'package:razorpay_flutter/razorpay_flutter.dart';
-import 'package:reelboost_ai/services/api_service.dart';
 
 enum PremiumPurchaseStatus { success, cancelled, failed }
 
+/// Razorpay checkout only (debug / non–Play-Store builds). Release store builds should use Play Billing.
 class PremiumPurchaseResult {
-  const PremiumPurchaseResult._(this.status, {this.message});
+  const PremiumPurchaseResult._(
+    this.status, {
+    this.message,
+    this.razorpayPaymentId,
+    this.razorpayOrderId,
+    this.razorpaySignature,
+  });
 
   final PremiumPurchaseStatus status;
   final String? message;
+  final String? razorpayPaymentId;
+  final String? razorpayOrderId;
+  final String? razorpaySignature;
 
-  static PremiumPurchaseResult success() =>
-      const PremiumPurchaseResult._(PremiumPurchaseStatus.success);
+  static PremiumPurchaseResult success({
+    String? razorpayPaymentId,
+    String? razorpayOrderId,
+    String? razorpaySignature,
+  }) =>
+      PremiumPurchaseResult._(
+        PremiumPurchaseStatus.success,
+        razorpayPaymentId: razorpayPaymentId,
+        razorpayOrderId: razorpayOrderId,
+        razorpaySignature: razorpaySignature,
+      );
+
   static PremiumPurchaseResult cancelled([String? message]) =>
       PremiumPurchaseResult._(PremiumPurchaseStatus.cancelled, message: message);
+
   static PremiumPurchaseResult failed([String? message]) =>
       PremiumPurchaseResult._(PremiumPurchaseStatus.failed, message: message);
 }
 
-/// Razorpay checkout + backend upgrade call (`POST /api/user/upgrade`).
-///
-/// Usage:
-/// - Create once (e.g. in `initState`)
-/// - Call [buyPremium199] to open Razorpay
-/// - Dispose in `dispose()`
+/// Razorpay checkout (development / sideloaded APKs only — not used in Play release).
 class RazorpayPaymentService {
   RazorpayPaymentService({String? razorpayKey})
       : _razorpayKey = (razorpayKey ?? _defaultKey).trim();
@@ -70,7 +83,7 @@ class RazorpayPaymentService {
 
     final options = <String, dynamic>{
       'key': _razorpayKey,
-      'amount': 19900, // ₹199 in paise
+      'amount': 19900,
       'name': 'ReelBoost AI',
       'description': 'Premium Upgrade ₹199',
       'prefill': {'email': email, 'name': name},
@@ -87,30 +100,25 @@ class RazorpayPaymentService {
     return c.future;
   }
 
-  Future<bool> upgradeUserOnBackend({required String userId}) async {
-    final uri = Uri.parse('${ApiService.baseUrl}/user/upgrade');
-    final res = await http.post(
-      uri,
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({'userId': userId}),
-    );
-    return res.statusCode >= 200 && res.statusCode < 300;
-  }
-
   void _completeIfNeeded(PremiumPurchaseResult result) {
-    final c = _completer;
-    if (c == null || c.isCompleted) return;
-    c.complete(result);
+    final comp = _completer;
+    if (comp == null || comp.isCompleted) return;
+    comp.complete(result);
   }
 
   void _onPaymentSuccess(PaymentSuccessResponse response) {
-    _completeIfNeeded(PremiumPurchaseResult.success());
+    _completeIfNeeded(
+      PremiumPurchaseResult.success(
+        razorpayPaymentId: response.paymentId,
+        razorpayOrderId: response.orderId,
+        razorpaySignature: response.signature,
+      ),
+    );
   }
 
   void _onPaymentError(PaymentFailureResponse response) {
     final code = response.code;
     final msg = response.message;
-    // Treat “cancel” as a distinct outcome for better UX.
     final lower = (msg ?? '').toLowerCase();
     final isCancel = code == 2 || lower.contains('cancel');
     if (isCancel) {
@@ -130,4 +138,3 @@ class RazorpayPaymentService {
     );
   }
 }
-

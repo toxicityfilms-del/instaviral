@@ -21,7 +21,7 @@ class _AppBottomBannerAdState extends State<AppBottomBannerAd> {
   @override
   void initState() {
     super.initState();
-    if (widget.show && supportsMobileAds) {
+    if (widget.show && supportsMobileAdsForBuild) {
       _load();
     }
   }
@@ -29,7 +29,7 @@ class _AppBottomBannerAdState extends State<AppBottomBannerAd> {
   @override
   void didUpdateWidget(covariant AppBottomBannerAd oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.show && !oldWidget.show && supportsMobileAds) {
+    if (widget.show && !oldWidget.show && supportsMobileAdsForBuild) {
       _load();
     }
     if (!widget.show && oldWidget.show) {
@@ -39,8 +39,10 @@ class _AppBottomBannerAdState extends State<AppBottomBannerAd> {
 
   void _load() {
     _disposeAd();
+    final unitId = AdUnitIds.banner;
+    if (unitId.isEmpty) return;
     final ad = BannerAd(
-      adUnitId: AdUnitIds.banner,
+      adUnitId: unitId,
       size: AdSize.banner,
       request: const AdRequest(),
       listener: BannerAdListener(
@@ -71,7 +73,7 @@ class _AppBottomBannerAdState extends State<AppBottomBannerAd> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.show || !supportsMobileAds || _ad == null) {
+    if (!widget.show || !supportsMobileAdsForBuild || _ad == null) {
       return const SizedBox.shrink();
     }
     final h = _loaded ? _ad!.size.height.toDouble() : AdSize.banner.height.toDouble();

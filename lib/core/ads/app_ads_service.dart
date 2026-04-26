@@ -11,6 +11,16 @@ import 'package:reelboost_ai/models/user_model.dart';
 abstract final class AppAdsService {
   static Future<void> ensureInitialized() async {
     if (!supportsMobileAds) return;
+    if (!AdUnitIds.adsEnabledForCurrentBuild) {
+      assert(() {
+        debugPrint(
+          'TODO(AdMob): Release build missing ADMOB_* dart-defines — ads will not load. '
+          'Set ADMOB_BANNER_ID, ADMOB_INTERSTITIAL_ID, ADMOB_REWARDED_ID and ADMOB_APP_ID (Android).',
+        );
+        return true;
+      }());
+      return;
+    }
     try {
       await MobileAds.instance.initialize();
       if (kDebugMode) {
@@ -29,7 +39,7 @@ abstract final class AppAdsService {
   /// Free users only; premium users never see rewarded ads here.
   static Future<bool> showRewardedForBonus({UserModel? user}) async {
     if (!AdPolicy.showAds(user)) return false;
-    if (!supportsMobileAds) return false;
+    if (!supportsMobileAdsForBuild) return false;
     final completer = Completer<bool>();
     var earned = false;
     RewardedAd.load(
@@ -73,7 +83,7 @@ abstract final class AppAdsService {
   }
 
   static Future<InterstitialAd?> loadInterstitial() async {
-    if (!supportsMobileAds) return null;
+    if (!supportsMobileAdsForBuild) return null;
     final completer = Completer<InterstitialAd?>();
     InterstitialAd.load(
       adUnitId: AdUnitIds.interstitial,

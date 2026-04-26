@@ -121,7 +121,7 @@ app.use('/api/profile', authMiddleware, profileRoutes);
 app.use('/api/post', authMiddleware, postRoutes);
 
 app.use('/api/usage', authMiddleware, usageRoutes);
-app.use('/api/user', userRoutes);
+app.use('/api/user', authMiddleware, userRoutes);
 
 app.use('/api/hashtag', authMiddleware, hashtagRoutes);
 app.use('/api/caption', authMiddleware, captionRoutes);
@@ -132,8 +132,6 @@ app.use('/api/trends', authMiddleware, trendsRoutes);
 app.use(errorHandler);
 
 async function start() {
-  // eslint-disable-next-line no-console
-  console.log('NEW_DEPLOY_CHECK_14APR');
   await new Promise((resolve, reject) => {
     const server = app.listen(port, host, () => {
       // eslint-disable-next-line no-console
@@ -159,12 +157,6 @@ async function start() {
   }
 
   logSmtpEnvDiagnostics('startup');
-
-  // eslint-disable-next-line no-console
-  console.log('[server] EXPOSE_RESET_LINK_ON_MAIL_FAILURE', {
-    raw: process.env.EXPOSE_RESET_LINK_ON_MAIL_FAILURE ?? '(unset)',
-    strictEqualsTrue: process.env.EXPOSE_RESET_LINK_ON_MAIL_FAILURE === 'true',
-  });
 
   const gmailOk =
     String(process.env.EMAIL_USER || '').trim() && String(process.env.EMAIL_PASS || '').trim();

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,7 +51,8 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
 
   final _idea = TextEditingController();
   final _picker = ImagePicker();
-  late final RazorpayPaymentService _payments;
+  /// Non-null only in non-release builds (Razorpay is not used for Play Store release).
+  RazorpayPaymentService? _payments;
 
   XFile? _imageFile;
   String? _imageDataUrl;
@@ -68,7 +70,9 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   @override
   void initState() {
     super.initState();
-    _payments = RazorpayPaymentService()..init();
+    if (!kReleaseMode) {
+      _payments = RazorpayPaymentService()..init();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _sanitizeStaleFreeLimitCache();
       await _syncProfileFromServer();
@@ -110,7 +114,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   void dispose() {
     final ideaText = _idea.text;
     SharedPreferences.getInstance().then((p) => p.setString(_ideaDraftKey, ideaText));
-    _payments.dispose();
+    _payments?.dispose();
     _idea.dispose();
     super.dispose();
   }
@@ -975,7 +979,8 @@ class _FreeUsageHighlight extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final displayLimit = 3;
-    final displayRemaining = remaining == null ? 3 : remaining.clamp(0, 3);
+    final rem = remaining;
+    final displayRemaining = rem == null ? 3 : rem.clamp(0, 3);
     return Semantics(
       label: atLimit
           ? 'Daily limit reached. Zero of $displayLimit analyses remaining'
@@ -1039,15 +1044,6 @@ class _FreeUsageHighlight extends StatelessWidget {
                 minHeight: 7,
                 backgroundColor: Colors.white.withValues(alpha: 0.08),
                 color: atLimit ? const Color(0xFFF87171) : AppTheme.accent2.withValues(alpha: 0.9),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'DEBUG LIMIT = 3',
-              style: TextStyle(
-                color: Colors.amber.shade300,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
               ),
             ),
           ],
