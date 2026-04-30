@@ -1,13 +1,14 @@
-/// Public URLs for Privacy Policy and Terms. Host the contents of `docs/privacy-policy.md` and
-/// `docs/terms.md` (or equivalent) at these URLs and update via `--dart-define` for production.
+/// Legal pages hosted on GitHub Pages. Override at build time with `--dart-define=LEGAL_PRIVACY_URL=...` etc.
 abstract final class AppLegalUrls {
+  static const _pagesBase = 'https://toxicityfilms-del.github.io/reelboost-legal';
+
   static const privacyPolicy = String.fromEnvironment(
     'LEGAL_PRIVACY_URL',
-    defaultValue: 'https://reelboost.app/privacy-policy',
+    defaultValue: '$_pagesBase/privacy-policy.html',
   );
 
   static const termsOfUse = String.fromEnvironment(
     'LEGAL_TERMS_URL',
-    defaultValue: 'https://reelboost.app/terms',
+    defaultValue: '$_pagesBase/terms.html',
   );
 }

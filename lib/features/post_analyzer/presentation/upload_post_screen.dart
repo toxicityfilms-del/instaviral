@@ -59,7 +59,6 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   Uint8List? _previewBytes;
 
   PostAnalysisResult? _result;
-  bool _resultIsPremium = false;
   bool _loading = false;
   bool _rewardLoading = false;
   bool _retryingReward = false;
@@ -101,11 +100,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     ref.read(authControllerProvider.notifier).applyUser(
           session.copyWith(
             postAnalyzeLimit: staleLimit ? 3 : session.postAnalyzeLimit,
-            postAnalyzeRemaining: staleRemaining
-                ? 3
-                : (session.postAnalyzeRemaining == null
-                    ? null
-                    : session.postAnalyzeRemaining!.clamp(0, 3)),
+            postAnalyzeRemaining: staleRemaining ? 3 : session.postAnalyzeRemaining?.clamp(0, 3),
           ),
         );
   }
@@ -230,7 +225,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     if (session == null) return (null, null);
     if (!AdPolicy.enforcePostAnalyzeLimits(session)) return (null, null);
     final cap = session.postAnalyzeLimit ?? 3;
-    final r = (session.postAnalyzeRemaining != null && cap != null)
+    final r = session.postAnalyzeRemaining != null
         ? session.postAnalyzeRemaining!.clamp(0, cap)
         : session.postAnalyzeRemaining;
     return (r, cap);
@@ -445,35 +440,23 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     );
   }
 
-  Future<void> _showFreemiumLimitDialog(BuildContext context) {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Limit Reached'),
-        content: const Text('Upgrade to Pro ₹199/month to continue'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await openPayment();
-            },
-            child: const Text('Upgrade Now'),
-          ),
-        ],
-      ),
-    );
-  }
-
+  /// Play Store release: no Razorpay and no `/user/upgrade` calls. Debug: Razorpay + verified backend upgrade only.
   Future<void> openPayment() async {
+    if (kReleaseMode) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Premium upgrade coming soon')),
+      );
+      return;
+    }
+
     final current = ref.read(authControllerProvider).asData?.value;
     if (current == null) return;
+    final payments = _payments;
+    if (payments == null) return;
+
     try {
-      final result = await _payments.buyPremium199(
+      final result = await payments.buyPremium199(
         userId: current.id,
         email: current.email,
         name: current.name,
@@ -494,29 +477,35 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
         return;
       }
 
-      final ok = await _payments.upgradeUserOnBackend(userId: current.id);
-      if (!mounted) return;
-      if (!ok) {
+      final pid = result.razorpayPaymentId?.trim() ?? '';
+      final oid = result.razorpayOrderId?.trim() ?? '';
+      final sig = result.razorpaySignature?.trim() ?? '';
+      if (pid.isEmpty || oid.isEmpty || sig.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Upgrade failed. Please try again.')),
+          const SnackBar(
+            content: Text(
+              'Payment succeeded but verification data is missing. '
+              'Use a Razorpay order created by your server, or set DEV_ALLOW_PREMIUM_UPGRADE on the API for QA.',
+            ),
+          ),
         );
         return;
       }
 
-      final merged = current.withPostAnalyzeUsage(
-        isPremium: true,
-        postAnalyzeLimit: null,
-        postAnalyzeRemaining: null,
-        postAnalyzeAdRewardsRemaining: null,
+      final user = await ref.read(reelboostApiProvider).upgradeAfterRazorpayPayment(
+        razorpayOrderId: oid,
+        razorpayPaymentId: pid,
+        razorpaySignature: sig,
       );
-      ref.read(authControllerProvider.notifier).applyUser(merged);
+      if (!mounted) return;
+      ref.read(authControllerProvider.notifier).applyUser(user);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You are now Premium')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Payment failed: $e')),
+        SnackBar(content: Text('Payment or upgrade failed: $e')),
       );
     }
   }
@@ -592,7 +581,6 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
       if (!mounted) return;
       setState(() {
         _result = response.result;
-        _resultIsPremium = response.isPremium;
         _lastFailIdea = null;
       });
       AppHaptics.success();

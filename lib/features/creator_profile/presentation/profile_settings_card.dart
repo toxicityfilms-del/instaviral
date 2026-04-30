@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reelboost_ai/core/legal/app_legal_urls.dart';
 import 'package:reelboost_ai/core/l10n/app_strings.dart';
 import 'package:reelboost_ai/core/notifications/local_notifications_service.dart';
 import 'package:reelboost_ai/core/settings/app_settings.dart';
@@ -54,6 +55,14 @@ class ProfileSettingsCard extends ConsumerWidget {
     );
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+    }
+  }
+
+  static Future<void> _openLegalUrl(String url) async {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || !uri.hasScheme) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -112,6 +121,20 @@ class ProfileSettingsCard extends ConsumerWidget {
             subtitle: Text(s.settingsAnalyticsOptInSub, style: TextStyle(color: AppTheme.onCardSecondary(context), fontSize: 12)),
             value: settings.analyticsOptIn,
             onChanged: (v) => ref.read(appSettingsProvider.notifier).setAnalyticsOptIn(v),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.policy_outlined),
+            title: const Text('Privacy Policy'),
+            trailing: const Icon(Icons.open_in_new_rounded, size: 18),
+            onTap: () => _openLegalUrl(AppLegalUrls.privacyPolicy),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('Terms of Use'),
+            trailing: const Icon(Icons.open_in_new_rounded, size: 18),
+            onTap: () => _openLegalUrl(AppLegalUrls.termsOfUse),
           ),
           const Divider(height: 24),
           Text(s.settingsReminder, style: _label(context)),
