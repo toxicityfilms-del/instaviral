@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:reelboost_ai/core/constants/api_user_messages.dart';
 import 'package:reelboost_ai/models/caption_models.dart';
 import 'package:reelboost_ai/models/post_analysis_models.dart';
 
@@ -37,36 +38,93 @@ class PostAnalyzeLimitException implements Exception {
   String toString() => message;
 }
 
+/// Result from `/hashtag/generate`, `/caption/generate`, or `/ideas/generate` including shared daily cap fields.
+class AiFeatureResult<T> {
+  const AiFeatureResult({
+    required this.value,
+    this.limit,
+    this.remaining,
+  });
+
+  final T value;
+  final int? limit;
+  final int? remaining;
+}
+
 /// REST paths (`/hashtag/...`, etc.). Dio is configured with the same base URL as the app-wide API base URL.
 class ReelboostApiService {
   ReelboostApiService(this._dio);
 
   final Dio _dio;
 
-  Future<HashtagBuckets> generateHashtags(String keyword) async {
-    final res = await _dio.post<Map<String, dynamic>>(
-      '/hashtag/generate',
-      data: {'keyword': keyword},
-    );
-    return _unwrapData(res, HashtagBuckets.fromJson);
+  Future<AiFeatureResult<HashtagBuckets>> generateHashtags(String keyword) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/hashtag/generate',
+        data: {'keyword': keyword},
+      );
+      final body = _successBodyMap(res);
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) {
+        throw const ApiException('Invalid response shape');
+      }
+      return AiFeatureResult(
+        value: HashtagBuckets.fromJson(data),
+        limit: (body['limit'] as num?)?.toInt(),
+        remaining: (body['remaining'] as num?)?.toInt(),
+      );
+    } on DioException catch (e) {
+      final lim = _sharedAiLimitFromDio(e);
+      if (lim != null) throw lim;
+      rethrow;
+    }
   }
 
-  Future<CaptionResult> generateCaption(String idea) async {
-    final res = await _dio.post<Map<String, dynamic>>(
-      '/caption/generate',
-      data: {'idea': idea},
-    );
-    return _unwrapData(res, CaptionResult.fromJson);
+  Future<AiFeatureResult<CaptionResult>> generateCaption(String idea) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/caption/generate',
+        data: {'idea': idea},
+      );
+      final body = _successBodyMap(res);
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) {
+        throw const ApiException('Invalid response shape');
+      }
+      return AiFeatureResult(
+        value: CaptionResult.fromJson(data),
+        limit: (body['limit'] as num?)?.toInt(),
+        remaining: (body['remaining'] as num?)?.toInt(),
+      );
+    } on DioException catch (e) {
+      final lim = _sharedAiLimitFromDio(e);
+      if (lim != null) throw lim;
+      rethrow;
+    }
   }
 
-  Future<List<String>> generateIdeas(String niche) async {
-    final res = await _dio.post<Map<String, dynamic>>(
-      '/ideas/generate',
-      data: {'niche': niche},
-    );
-    final data = _unwrapMap(res);
-    final ideas = data['ideas'] as List<dynamic>? ?? [];
-    return ideas.map((e) => e.toString()).toList();
+  Future<AiFeatureResult<List<String>>> generateIdeas(String niche) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/ideas/generate',
+        data: {'niche': niche},
+      );
+      final body = _successBodyMap(res);
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) {
+        throw const ApiException('Invalid response shape');
+      }
+      final ideas = data['ideas'] as List<dynamic>? ?? [];
+      return AiFeatureResult(
+        value: ideas.map((e) => e.toString()).toList(),
+        limit: (body['limit'] as num?)?.toInt(),
+        remaining: (body['remaining'] as num?)?.toInt(),
+      );
+    } on DioException catch (e) {
+      final lim = _sharedAiLimitFromDio(e);
+      if (lim != null) throw lim;
+      rethrow;
+    }
   }
 
   Future<ViralAnalysis> analyzeViral({
@@ -206,6 +264,26 @@ class ReelboostApiService {
   static const String _defaultLimitMessage =
       "You've reached today's limit for free post analyses. Upgrade to Premium for unlimited analyses.";
 
+  /// Detects `403` with `error` `LIMIT_REACHED` (hashtag / caption / ideas shared cap).
+  PostAnalyzeLimitException? _sharedAiLimitFromDio(DioException e) {
+    if (e.response?.statusCode != 403) return null;
+    final raw = _dioResponseDataMap(e.response?.data);
+    if (raw == null) return null;
+    if (raw['error']?.toString() != 'LIMIT_REACHED') return null;
+    if (kDebugMode) {
+      developer.log(
+        'LIMIT_REACHED shared AI cap',
+        name: 'ReelboostApiService',
+      );
+    }
+    final msg = raw['message']?.toString().trim();
+    return PostAnalyzeLimitException(
+      message: (msg != null && msg.isNotEmpty) ? msg : kSharedAiDailyLimitMessage,
+      limit: (raw['limit'] as num?)?.toInt(),
+      used: null,
+    );
+  }
+
   /// Detects `403` with `code` `POST_ANALYZE_LIMIT` (case-insensitive).
   PostAnalyzeLimitException? _postAnalyzeLimitFromDio(DioException e) {
     if (e.response?.statusCode != 403) return null;
@@ -334,11 +412,16 @@ class ReelboostApiService {
     }
   }
 
-  Map<String, dynamic> _unwrapMap(Response<Map<String, dynamic>> res) {
+  Map<String, dynamic> _successBodyMap(Response<Map<String, dynamic>> res) {
     final body = res.data;
     if (body == null || body['success'] != true) {
       throw ApiException(body?['message']?.toString() ?? 'Request failed');
     }
+    return body;
+  }
+
+  Map<String, dynamic> _unwrapMap(Response<Map<String, dynamic>> res) {
+    final body = _successBodyMap(res);
     final data = body['data'];
     if (data is! Map<String, dynamic>) {
       throw const ApiException('Invalid response shape');

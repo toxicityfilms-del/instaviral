@@ -149,73 +149,6 @@ async function main() {
   results.push(['POST /viral/analyze', viralOk]);
   console.log(viralOk ? `OK  viral score=${body.data.score}` : 'FAIL viral', res.status, body.message || body);
 
-  res = await fetch(`${BASE}/hashtag/generate`, {
-    method: 'POST',
-    headers: auth,
-    body: JSON.stringify({ keyword: 'fitness' }),
-  });
-  body = await json(res);
-  let tagOk =
-    res.ok &&
-    body.success &&
-    body.data?.high?.length &&
-    body.data?.medium?.length &&
-    body.data?.low?.length;
-  let tagSkipped = false;
-  if (!tagOk && isOpenAiMisconfig(res, body)) {
-    console.log('SKIP POST /hashtag/generate (set valid OPENAI_API_KEY in .env to test)');
-    tagOk = true;
-    tagSkipped = true;
-  }
-  results.push(['POST /hashtag/generate', tagOk]);
-  if (tagOk && !tagSkipped) {
-    console.log(
-      `OK  hashtag buckets high=${body.data.high.length} medium=${body.data.medium.length} low=${body.data.low.length}`
-    );
-  } else if (!tagOk) {
-    console.log('FAIL hashtag', res.status, body.message || '');
-  }
-
-  res = await fetch(`${BASE}/caption/generate`, {
-    method: 'POST',
-    headers: auth,
-    body: JSON.stringify({ idea: 'morning gym motivation' }),
-  });
-  body = await json(res);
-  let capOk = res.ok && body.success && body.data?.caption;
-  let capSkipped = false;
-  if (!capOk && isOpenAiMisconfig(res, body)) {
-    console.log('SKIP POST /caption/generate (set valid OPENAI_API_KEY in .env to test)');
-    capOk = true;
-    capSkipped = true;
-  }
-  results.push(['POST /caption/generate', capOk]);
-  if (capOk && !capSkipped) {
-    console.log(`OK  caption (${body.data.caption.length} chars, hooks=${body.data.hooks?.length || 0})`);
-  } else if (!capOk) {
-    console.log('FAIL caption', res.status, body.message || '');
-  }
-
-  res = await fetch(`${BASE}/ideas/generate`, {
-    method: 'POST',
-    headers: auth,
-    body: JSON.stringify({ niche: 'skincare' }),
-  });
-  body = await json(res);
-  let ideasOk = res.ok && body.success && Array.isArray(body.data?.ideas) && body.data.ideas.length >= 1;
-  let ideasSkipped = false;
-  if (!ideasOk && isOpenAiMisconfig(res, body)) {
-    console.log('SKIP POST /ideas/generate (set valid OPENAI_API_KEY in .env to test)');
-    ideasOk = true;
-    ideasSkipped = true;
-  }
-  results.push(['POST /ideas/generate', ideasOk]);
-  if (ideasOk && !ideasSkipped) {
-    console.log(`OK  ideas count=${body.data.ideas.length}`);
-  } else if (!ideasOk) {
-    console.log('FAIL ideas', res.status, body.message || '');
-  }
-
   const postPayload = () => ({
     idea: 'sunset coffee reel aesthetic',
     niche: 'testing',
@@ -303,6 +236,150 @@ async function main() {
   }
 
   results.push(['POST /post/analyze (+ limit)', postSkipped || (postOk && postLimitSuiteOk)]);
+
+  let sharedCapHashtagOk = true;
+  if (!postSkipped && postOk && postLimitSuiteOk) {
+    res = await fetch(`${BASE}/hashtag/generate`, {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ keyword: 'fitness' }),
+    });
+    body = await json(res);
+    sharedCapHashtagOk =
+      res.status === 403 &&
+      body.error === 'LIMIT_REACHED' &&
+      body.message &&
+      body.limit === 3 &&
+      body.remaining === 0;
+    results.push(['POST /hashtag/generate (403 shared AI cap)', sharedCapHashtagOk]);
+    console.log(
+      sharedCapHashtagOk
+        ? 'OK  hashtag blocked after shared daily cap'
+        : 'FAIL hashtag should 403 LIMIT_REACHED after cap',
+      res.status,
+      body
+    );
+  } else {
+    results.push(['POST /hashtag/generate (403 shared AI cap)', true]);
+  }
+
+  let tagOk = true;
+  let tagSkipped = false;
+  let capOk = true;
+  let capSkipped = false;
+  let ideasOk = true;
+  let ideasSkipped = false;
+
+  const email2 = `apitest_ai_${Date.now()}@example.com`;
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email2, password, name: 'API Test AI' }),
+  });
+  body = await json(res);
+  if (!res.ok || !body.success) {
+    console.error('FAIL signup (user2)', res.status, body);
+    process.exit(1);
+  }
+  const token2 = body.token;
+  const auth2 = {
+    Authorization: `Bearer ${token2}`,
+    'Content-Type': 'application/json',
+  };
+
+  res = await fetch(`${BASE}/hashtag/generate`, {
+    method: 'POST',
+    headers: auth2,
+    body: JSON.stringify({ keyword: 'fitness' }),
+  });
+  body = await json(res);
+  tagOk =
+    res.ok &&
+    body.success &&
+    body.data?.high?.length &&
+    body.data?.medium?.length &&
+    body.data?.low?.length &&
+    body.limit === 3 &&
+    body.remaining === 2;
+  tagSkipped = false;
+  if (!tagOk && isOpenAiMisconfig(res, body)) {
+    console.log('SKIP POST /hashtag/generate (set valid OPENAI_API_KEY in .env to test)');
+    tagOk = true;
+    tagSkipped = true;
+  }
+  results.push(['POST /hashtag/generate', tagOk]);
+  if (tagOk && !tagSkipped) {
+    console.log(
+      `OK  hashtag buckets high=${body.data.high.length} medium=${body.data.medium.length} low=${body.data.low.length} remaining=${body.remaining}`
+    );
+  } else if (!tagOk) {
+    console.log('FAIL hashtag', res.status, body.message || body.error || '');
+  }
+
+  res = await fetch(`${BASE}/caption/generate`, {
+    method: 'POST',
+    headers: auth2,
+    body: JSON.stringify({ idea: 'morning gym motivation' }),
+  });
+  body = await json(res);
+  capOk =
+    res.ok && body.success && body.data?.caption && body.limit === 3 && body.remaining === 1;
+  capSkipped = false;
+  if (!capOk && isOpenAiMisconfig(res, body)) {
+    console.log('SKIP POST /caption/generate (set valid OPENAI_API_KEY in .env to test)');
+    capOk = true;
+    capSkipped = true;
+  }
+  results.push(['POST /caption/generate', capOk]);
+  if (capOk && !capSkipped) {
+    console.log(`OK  caption (${body.data.caption.length} chars, hooks=${body.data.hooks?.length || 0}) remaining=${body.remaining}`);
+  } else if (!capOk) {
+    console.log('FAIL caption', res.status, body.message || body.error || '');
+  }
+
+  res = await fetch(`${BASE}/ideas/generate`, {
+    method: 'POST',
+    headers: auth2,
+    body: JSON.stringify({ niche: 'skincare' }),
+  });
+  body = await json(res);
+  ideasOk =
+    res.ok &&
+    body.success &&
+    Array.isArray(body.data?.ideas) &&
+    body.data.ideas.length >= 1 &&
+    body.limit === 3 &&
+    body.remaining === 0;
+  ideasSkipped = false;
+  if (!ideasOk && isOpenAiMisconfig(res, body)) {
+    console.log('SKIP POST /ideas/generate (set valid OPENAI_API_KEY in .env to test)');
+    ideasOk = true;
+    ideasSkipped = true;
+  }
+  results.push(['POST /ideas/generate', ideasOk]);
+  if (ideasOk && !ideasSkipped) {
+    console.log(`OK  ideas count=${body.data.ideas.length} remaining=${body.remaining}`);
+  } else if (!ideasOk) {
+    console.log('FAIL ideas', res.status, body.message || body.error || '');
+  }
+
+  if (ideasOk && !ideasSkipped) {
+    res = await fetch(`${BASE}/hashtag/generate`, {
+      method: 'POST',
+      headers: auth2,
+      body: JSON.stringify({ keyword: 'blocked' }),
+    });
+    body = await json(res);
+    const fourthOk =
+      res.status === 403 &&
+      body.error === 'LIMIT_REACHED' &&
+      body.limit === 3 &&
+      body.remaining === 0;
+    results.push(['POST /hashtag/generate (403 after 3 AI calls)', fourthOk]);
+    console.log(fourthOk ? 'OK  4th AI call blocked (shared cap)' : 'FAIL 4th AI call', res.status, body);
+  } else {
+    results.push(['POST /hashtag/generate (403 after 3 AI calls)', true]);
+  }
 
   const failed = results.filter(([, ok]) => !ok);
   if (failed.length) {

@@ -4,6 +4,8 @@ import 'package:reelboost_ai/core/l10n/app_strings.dart';
 import 'package:reelboost_ai/core/utils/dio_error_message.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
 
+export 'package:reelboost_ai/core/constants/api_user_messages.dart';
+
 /// User-facing text for failures from the reelboost API layer or Dio.
 String apiErrorMessage(Object error) {
   if (error is ApiException) return error.message;

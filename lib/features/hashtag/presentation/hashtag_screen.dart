@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
+import 'package:reelboost_ai/core/utils/shared_ai_limit_dialog.dart';
 import 'package:reelboost_ai/models/hashtag_models.dart';
+import 'package:reelboost_ai/services/reelboost_api_service.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:reelboost_ai/widgets/section_title.dart';
 
@@ -41,9 +43,40 @@ class _HashtagScreenState extends ConsumerState<HashtagScreen> with SingleTicker
       _result = null;
     });
     final api = ref.read(reelboostApiProvider);
+    final session = ref.read(authControllerProvider).asData?.value;
     try {
       final r = await api.generateHashtags(kw);
-      setState(() => _result = r);
+      setState(() => _result = r.value);
+      if (session != null && r.limit != null && r.remaining != null) {
+        ref.read(authControllerProvider.notifier).applyUser(
+              session.withPostAnalyzeUsage(
+                isPremium: false,
+                postAnalyzeLimit: r.limit,
+                postAnalyzeRemaining: r.remaining,
+                postAnalyzeAdRewardsRemaining: session.postAnalyzeAdRewardsRemaining,
+              ),
+            );
+      }
+      if (!mounted) return;
+      if (r.remaining != null && r.remaining! <= 0) {
+        showLastFreeAiUseSnackBar(context);
+      }
+    } on PostAnalyzeLimitException catch (e) {
+      if (!mounted) return;
+      final detail =
+          e.message.trim().isNotEmpty ? e.message.trim() : kSharedAiDailyLimitMessage;
+      await showSharedAiDailyLimitDialog(context, serverDetail: detail, limit: e.limit);
+      final s = ref.read(authControllerProvider).asData?.value;
+      if (s != null) {
+        ref.read(authControllerProvider.notifier).applyUser(
+              s.withPostAnalyzeUsage(
+                isPremium: false,
+                postAnalyzeLimit: e.limit ?? s.postAnalyzeLimit,
+                postAnalyzeRemaining: 0,
+                postAnalyzeAdRewardsRemaining: s.postAnalyzeAdRewardsRemaining,
+              ),
+            );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));

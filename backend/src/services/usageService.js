@@ -191,7 +191,22 @@ async function assertPostAnalyzeAllowed(userId) {
 }
 
 /**
- * Call only after OpenAI analysis succeeded. Free users: +1 for today (capped). Premium: no DB change.
+ * JSON body for hashtag/caption/ideas when the shared free daily AI cap is exhausted.
+ * (Post analyze keeps `success: false` + `code: POST_ANALYZE_LIMIT` for app compatibility.)
+ */
+function buildSharedAiLimitReachedBody(gateBody) {
+  const lim = gateBody && typeof gateBody.limit === 'number' ? gateBody.limit : FREE_POST_ANALYZE_DAILY;
+  return {
+    error: 'LIMIT_REACHED',
+    message: 'Daily free limit reached. Upgrade to premium.',
+    limit: lim,
+    remaining: 0,
+  };
+}
+
+/**
+ * Call only after a gated AI action succeeded (post analyze, analyze media, hashtag, caption, or ideas).
+ * Free users: +1 for today (capped). Premium: no DB change.
  */
 async function commitPostAnalyzeUsageAfterSuccess(userId) {
   const user = await User.findById(userId);
@@ -371,6 +386,7 @@ module.exports = {
   normalizeAdRewardAnalytics,
   buildPostAnalyzeUsageMeta,
   assertPostAnalyzeAllowed,
+  buildSharedAiLimitReachedBody,
   commitPostAnalyzeUsageAfterSuccess,
   grantAdRewardSlot,
   resetSuspiciousAdFlags,
