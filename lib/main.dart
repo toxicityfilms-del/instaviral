@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app_links/app_links.dart';
 import 'package:reelboost_ai/core/notifications/local_notifications_service.dart';
+import 'package:reelboost_ai/core/navigation/root_navigator.dart';
 import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/settings/app_settings.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
@@ -85,7 +86,7 @@ class ReelBoostApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     return MaterialApp(
-      navigatorKey: _rootNavigatorKey,
+      navigatorKey: rootNavigatorKey,
       title: 'ReelBoost AI',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
@@ -105,8 +106,6 @@ class ReelBoostApp extends ConsumerWidget {
     );
   }
 }
-
-final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 class AuthGate extends ConsumerStatefulWidget {
   const AuthGate({super.key});
@@ -174,8 +173,8 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     if (_lastDeepLinkToken == token) return;
     _lastDeepLinkToken = token;
 
-    final nav = _rootNavigatorKey.currentState;
-    final context = _rootNavigatorKey.currentContext;
+    final nav = rootNavigatorKey.currentState;
+    final context = rootNavigatorKey.currentContext;
     if (nav == null || context == null) return;
 
     nav.push(
