@@ -22,6 +22,7 @@ async function analyze(req, res, next) {
     const imageBase64 = req.body.imageBase64;
     const niche = req.body.niche;
     const bio = req.body.bio;
+    // free path: local pack. premium: OpenAI — missing key / error → local pack + data.source "fallback" (200).
     const data = await analyzePost({
       idea,
       imageBase64,
@@ -74,6 +75,7 @@ async function analyzeMedia(req, res, next) {
     const file = req.file;
     const thumbnailDataUrl = req.body.thumbnailDataUrl;
 
+    // free path: heuristic ctx + local pack. premium: vision + OpenAI — failures → local + source "fallback" on affected objects (200).
     const ctx = await extractMediaContext({
       imageDataUrl: thumbnailDataUrl,
       file,

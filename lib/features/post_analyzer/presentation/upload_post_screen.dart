@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,18 +12,20 @@ import 'package:reelboost_ai/core/ads/app_ads_service.dart';
 import 'package:reelboost_ai/core/haptics/app_haptics.dart';
 import 'package:reelboost_ai/core/l10n/app_strings.dart';
 import 'package:reelboost_ai/core/notifications/local_notifications_service.dart';
+import 'package:reelboost_ai/core/premium/premium_checkout.dart';
+import 'package:reelboost_ai/core/premium/premium_monthly_pitch_dialog.dart';
 import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
+import 'package:reelboost_ai/core/utils/ai_credits_limit_dialog.dart';
 import 'package:reelboost_ai/core/services/analysis_history_service.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
 import 'package:reelboost_ai/core/utils/post_analysis_pack.dart';
 import 'package:reelboost_ai/widgets/app_card.dart';
-import 'package:reelboost_ai/features/profile/presentation/profile_screen.dart';
 import 'package:reelboost_ai/features/analyze_media/presentation/analyze_media_screen.dart';
+import 'package:reelboost_ai/features/profile/presentation/profile_screen.dart';
 import 'package:reelboost_ai/models/post_analysis_models.dart';
 import 'package:reelboost_ai/models/user_model.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
-import 'package:reelboost_ai/services/payments/razorpay_payment_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:share_plus/share_plus.dart';
@@ -51,8 +52,6 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
 
   final _idea = TextEditingController();
   final _picker = ImagePicker();
-  /// Non-null only in non-release builds (Razorpay is not used for Play Store release).
-  RazorpayPaymentService? _payments;
 
   XFile? _imageFile;
   String? _imageDataUrl;
@@ -69,9 +68,6 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   @override
   void initState() {
     super.initState();
-    if (!kReleaseMode) {
-      _payments = RazorpayPaymentService()..init();
-    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _sanitizeStaleFreeLimitCache();
       await _syncProfileFromServer();
@@ -109,7 +105,6 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   void dispose() {
     final ideaText = _idea.text;
     SharedPreferences.getInstance().then((p) => p.setString(_ideaDraftKey, ideaText));
-    _payments?.dispose();
     _idea.dispose();
     super.dispose();
   }
@@ -237,9 +232,17 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     return 'Analyze post';
   }
 
-  Future<void> _openProfileForUpgrade(BuildContext context) {
-    return Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
+  void _showPremiumPitch(BuildContext context) {
+    showPremiumMonthlyPitchDialog(
+      context,
+      onDebugStartPurchase: () => attemptPremiumRazorpayCheckout(ref, context),
+    );
+  }
+
+  Future<void> _showAiCreditsLimit(BuildContext context) {
+    return showAiCreditsLimitDialog(
+      context,
+      onUpgrade: () => _showPremiumPitch(context),
     );
   }
 
@@ -376,139 +379,8 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     }
   }
 
-  /// Shown when the user hits the server limit (403) or when already at 0 and they try to analyze.
-  Future<void> _showDailyLimitDialog(BuildContext context, {String? serverDetail, int? limit}) {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.hourglass_disabled_rounded, color: AppTheme.accent2.withValues(alpha: 0.95), size: 36),
-        title: const Text('Daily limit reached'),
-        content: Text(
-          [
-            if (serverDetail != null && serverDetail.trim().isNotEmpty) serverDetail.trim(),
-            limit != null
-                ? 'You’ve used all $limit free post analyses for today. Upgrade to Premium for unlimited analyses every day.'
-                : 'You’ve used all your free post analyses for today. Upgrade to Premium for unlimited analyses every day.',
-          ].where((s) => s.isNotEmpty).join('\n\n'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Not now'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _openProfileForUpgrade(context);
-            },
-            child: const Text('Upgrade to Premium'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showPremiumPitchDialog(BuildContext context, {String? detail}) {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.workspace_premium_rounded, color: AppTheme.accent.withValues(alpha: 0.95), size: 36),
-        title: const Text('Upgrade to Premium'),
-        content: Text(
-          [
-            if (detail != null && detail.isNotEmpty) detail,
-            'Premium unlocks unlimited post analyses every day. '
-                'Free accounts have a daily analysis limit.',
-          ].where((s) => s.isNotEmpty).join('\n\n'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Maybe later'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _openProfileForUpgrade(context);
-            },
-            child: const Text('View plans'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Play Store release: no Razorpay and no `/user/upgrade` calls. Debug: Razorpay + verified backend upgrade only.
-  Future<void> openPayment() async {
-    if (kReleaseMode) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Premium upgrade coming soon')),
-      );
-      return;
-    }
-
-    final current = ref.read(authControllerProvider).asData?.value;
-    if (current == null) return;
-    final payments = _payments;
-    if (payments == null) return;
-
-    try {
-      final result = await payments.buyPremium199(
-        userId: current.id,
-        email: current.email,
-        name: current.name,
-      );
-
-      if (!mounted) return;
-
-      if (result.status == PremiumPurchaseStatus.cancelled) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payment cancelled')),
-        );
-        return;
-      }
-      if (result.status == PremiumPurchaseStatus.failed) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.message ?? 'Payment failed')),
-        );
-        return;
-      }
-
-      final pid = result.razorpayPaymentId?.trim() ?? '';
-      final oid = result.razorpayOrderId?.trim() ?? '';
-      final sig = result.razorpaySignature?.trim() ?? '';
-      if (pid.isEmpty || oid.isEmpty || sig.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Payment succeeded but verification data is missing. '
-              'Use a Razorpay order created by your server, or set DEV_ALLOW_PREMIUM_UPGRADE on the API for QA.',
-            ),
-          ),
-        );
-        return;
-      }
-
-      final user = await ref.read(reelboostApiProvider).upgradeAfterRazorpayPayment(
-        razorpayOrderId: oid,
-        razorpayPaymentId: pid,
-        razorpaySignature: sig,
-      );
-      if (!mounted) return;
-      ref.read(authControllerProvider.notifier).applyUser(user);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You are now Premium')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Payment or upgrade failed: $e')),
-      );
-    }
-  }
+  /// Debug/sideload: Razorpay + `/user/upgrade`. Release: snackbar only (see [attemptPremiumRazorpayCheckout]).
+  Future<void> openPayment() => attemptPremiumRazorpayCheckout(ref, context);
 
   Future<void> _pickPostReminder() async {
     final strings = ref.read(appStringsProvider);
@@ -540,7 +412,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
     final sessionBefore = ref.read(authControllerProvider).asData?.value;
     if (_isAtDailyLimit(sessionBefore)) {
       if (!mounted) return;
-      await _showDailyLimitDialog(context);
+      await _showAiCreditsLimit(context);
       return;
     }
     setState(() {
@@ -594,25 +466,11 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
       );
       final rem = response.postAnalyzeRemaining;
       if (response.isPremium != true && rem != null && rem <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('That was your last free analysis for today.'),
-            action: SnackBarAction(
-              label: 'Upgrade',
-              onPressed: () {
-                if (context.mounted) _openProfileForUpgrade(context);
-              },
-            ),
-          ),
-        );
+        showLastFreeAiUseSnackBar(context, onUpgrade: () => _showPremiumPitch(context));
       }
     } on PostAnalyzeLimitException catch (e) {
       if (!mounted) return;
-      await _showDailyLimitDialog(
-        context,
-        serverDetail: e.message,
-        limit: e.limit,
-      );
+      await _showAiCreditsLimit(context);
       if (session != null) {
         ref.read(authControllerProvider.notifier).applyUser(
               session.withPostAnalyzeUsage(
@@ -625,12 +483,18 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      if (e is ApiException && e.code == 'LIMIT_REACHED') {
-        await _showDailyLimitDialog(
-          context,
-          serverDetail: 'You have used your 3 free analyses today',
-          limit: session?.postAnalyzeLimit,
-        );
+      if (e is ApiException && e.code?.toUpperCase() == 'LIMIT_REACHED') {
+        await _showAiCreditsLimit(context);
+        if (session != null) {
+          ref.read(authControllerProvider.notifier).applyUser(
+                session.withPostAnalyzeUsage(
+                  isPremium: false,
+                  postAnalyzeLimit: session.postAnalyzeLimit,
+                  postAnalyzeRemaining: 0,
+                  postAnalyzeAdRewardsRemaining: session.postAnalyzeAdRewardsRemaining,
+                ),
+              );
+        }
         return;
       }
       final strings = ref.read(appStringsProvider);
@@ -732,7 +596,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
                   const SizedBox(height: 12),
                   _UsageTierBanner(
                     session: session,
-                    onUpgradeTap: () => _showPremiumPitchDialog(context),
+                    onUpgradeTap: () => _showPremiumPitch(context),
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -845,7 +709,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
                     child: FilledButton.tonalIcon(
                       onPressed: _loading
                           ? null
-                          : () => _showPremiumPitchDialog(context),
+                          : () => _showPremiumPitch(context),
                       icon: const Icon(Icons.workspace_premium_rounded, size: 22),
                       label: const Text('Upgrade to Premium'),
                       style: FilledButton.styleFrom(

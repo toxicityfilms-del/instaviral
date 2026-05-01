@@ -156,7 +156,7 @@ class AppStringsEn implements AppStrings {
   @override
   String get tileHashtags => 'Hashtags';
   @override
-  String get tileHashtagsSub => '30 tags by competition';
+  String get tileHashtagsSub => '15 tags by competition';
   @override
   String get tileCaption => 'Caption';
   @override
@@ -168,7 +168,7 @@ class AppStringsEn implements AppStrings {
   @override
   String get tileIdeas => 'Ideas';
   @override
-  String get tileIdeasSub => '10 reel ideas';
+  String get tileIdeasSub => '5 reel ideas';
   @override
   String get tileViralScore => 'Viral score';
   @override
@@ -327,7 +327,7 @@ class AppStringsEn implements AppStrings {
   @override
   String get workflowStepHashtags => 'Hashtags';
   @override
-  String get workflowStepHashtagsSub => '30 tags tuned to competition';
+  String get workflowStepHashtagsSub => '15 tags tuned to competition';
   @override
   String get workflowStepPostAnalyzer => 'Post analyzer';
   @override
@@ -417,7 +417,7 @@ class AppStringsHi implements AppStrings {
   @override
   String get tileHashtags => 'हैशटैग';
   @override
-  String get tileHashtagsSub => 'कॉम्पिटिशन के हिसाब से 30 टैग';
+  String get tileHashtagsSub => 'कॉम्पिटिशन के हिसाब से 15 टैग';
   @override
   String get tileCaption => 'कैप्शन';
   @override
@@ -429,7 +429,7 @@ class AppStringsHi implements AppStrings {
   @override
   String get tileIdeas => 'आइडियाज';
   @override
-  String get tileIdeasSub => '10 रील आइडियाज';
+  String get tileIdeasSub => '5 रील आइडियाज';
   @override
   String get tileViralScore => 'वायरल स्कोर';
   @override
@@ -588,7 +588,7 @@ class AppStringsHi implements AppStrings {
   @override
   String get workflowStepHashtags => 'हैशटैग';
   @override
-  String get workflowStepHashtagsSub => '30 टैग';
+  String get workflowStepHashtagsSub => '15 टैग';
   @override
   String get workflowStepPostAnalyzer => 'पोस्ट एनालाइज़र';
   @override

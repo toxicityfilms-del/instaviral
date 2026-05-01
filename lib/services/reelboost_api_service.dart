@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:reelboost_ai/core/constants/api_user_messages.dart';
 import 'package:reelboost_ai/models/caption_models.dart';
 import 'package:reelboost_ai/models/post_analysis_models.dart';
@@ -44,11 +42,22 @@ class AiFeatureResult<T> {
     required this.value,
     this.limit,
     this.remaining,
+    this.source,
   });
 
   final T value;
   final int? limit;
   final int? remaining;
+  /// Server `data.source`: `openai` (model), `fallback` (premium but local), or null (free / omitted).
+  final String? source;
+
+  static String? parseSource(Map<String, dynamic> data) {
+    final raw = data['source'];
+    if (raw == null) return null;
+    final s = raw.toString();
+    if (s == 'fallback' || s == 'openai') return s;
+    return null;
+  }
 }
 
 /// REST paths (`/hashtag/...`, etc.). Dio is configured with the same base URL as the app-wide API base URL.
@@ -72,9 +81,10 @@ class ReelboostApiService {
         value: HashtagBuckets.fromJson(data),
         limit: (body['limit'] as num?)?.toInt(),
         remaining: (body['remaining'] as num?)?.toInt(),
+        source: AiFeatureResult.parseSource(data),
       );
     } on DioException catch (e) {
-      final lim = _sharedAiLimitFromDio(e);
+      final lim = _anyFreeAiLimitFromDio(e);
       if (lim != null) throw lim;
       rethrow;
     }
@@ -97,7 +107,7 @@ class ReelboostApiService {
         remaining: (body['remaining'] as num?)?.toInt(),
       );
     } on DioException catch (e) {
-      final lim = _sharedAiLimitFromDio(e);
+      final lim = _anyFreeAiLimitFromDio(e);
       if (lim != null) throw lim;
       rethrow;
     }
@@ -119,9 +129,10 @@ class ReelboostApiService {
         value: ideas.map((e) => e.toString()).toList(),
         limit: (body['limit'] as num?)?.toInt(),
         remaining: (body['remaining'] as num?)?.toInt(),
+        source: AiFeatureResult.parseSource(data),
       );
     } on DioException catch (e) {
-      final lim = _sharedAiLimitFromDio(e);
+      final lim = _anyFreeAiLimitFromDio(e);
       if (lim != null) throw lim;
       rethrow;
     }
@@ -212,7 +223,7 @@ class ReelboostApiService {
       );
       return _unwrapPostAnalyze(res);
     } on DioException catch (e) {
-      final limit = _postAnalyzeLimitFromDio(e);
+      final limit = _anyFreeAiLimitFromDio(e);
       if (limit != null) {
         throw limit;
       }
@@ -255,7 +266,7 @@ class ReelboostApiService {
       );
       return _unwrapPostAnalyze(res);
     } on DioException catch (e) {
-      final limit = _postAnalyzeLimitFromDio(e);
+      final limit = _anyFreeAiLimitFromDio(e);
       if (limit != null) throw limit;
       rethrow;
     }
@@ -264,45 +275,30 @@ class ReelboostApiService {
   static const String _defaultLimitMessage =
       "You've reached today's limit for free post analyses. Upgrade to Premium for unlimited analyses.";
 
-  /// Detects `403` with `error` `LIMIT_REACHED` (hashtag / caption / ideas shared cap).
-  PostAnalyzeLimitException? _sharedAiLimitFromDio(DioException e) {
+  /// `403` when free daily AI cap is hit: `error` or `code` `LIMIT_REACHED`, or `code` `POST_ANALYZE_LIMIT`.
+  PostAnalyzeLimitException? _anyFreeAiLimitFromDio(DioException e) {
     if (e.response?.statusCode != 403) return null;
     final raw = _dioResponseDataMap(e.response?.data);
     if (raw == null) return null;
-    if (raw['error']?.toString() != 'LIMIT_REACHED') return null;
-    if (kDebugMode) {
-      developer.log(
-        'LIMIT_REACHED shared AI cap',
-        name: 'ReelboostApiService',
+    final err = raw['error']?.toString();
+    final code = raw['code']?.toString().toUpperCase();
+    if (err == 'LIMIT_REACHED' || code == 'LIMIT_REACHED') {
+      final msg = raw['message']?.toString().trim();
+      return PostAnalyzeLimitException(
+        message: (msg != null && msg.isNotEmpty) ? msg : kSharedAiDailyLimitMessage,
+        limit: (raw['limit'] as num?)?.toInt(),
+        used: (raw['used'] as num?)?.toInt(),
       );
     }
-    final msg = raw['message']?.toString().trim();
-    return PostAnalyzeLimitException(
-      message: (msg != null && msg.isNotEmpty) ? msg : kSharedAiDailyLimitMessage,
-      limit: (raw['limit'] as num?)?.toInt(),
-      used: null,
-    );
-  }
-
-  /// Detects `403` with `code` `POST_ANALYZE_LIMIT` (case-insensitive).
-  PostAnalyzeLimitException? _postAnalyzeLimitFromDio(DioException e) {
-    if (e.response?.statusCode != 403) return null;
-    final raw = _dioResponseDataMap(e.response?.data);
-    if (raw == null) return null;
-    if (kDebugMode) {
-      developer.log(
-        'POST_ANALYZE_LIMIT response code=${raw['code']}',
-        name: 'ReelboostApiService',
+    if (code == 'POST_ANALYZE_LIMIT') {
+      final msg = raw['message']?.toString().trim();
+      return PostAnalyzeLimitException(
+        message: (msg != null && msg.isNotEmpty) ? msg : _defaultLimitMessage,
+        limit: (raw['limit'] as num?)?.toInt(),
+        used: (raw['used'] as num?)?.toInt(),
       );
     }
-    final code = raw['code']?.toString();
-    if (code == null || code.toUpperCase() != 'POST_ANALYZE_LIMIT') return null;
-    final msg = raw['message']?.toString().trim();
-    return PostAnalyzeLimitException(
-      message: (msg != null && msg.isNotEmpty) ? msg : _defaultLimitMessage,
-      limit: (raw['limit'] as num?)?.toInt(),
-      used: (raw['used'] as num?)?.toInt(),
-    );
+    return null;
   }
 
   /// Dio may deserialize JSON as `Map<dynamic, dynamic>` or a raw string; normalize for code checks.
@@ -351,24 +347,12 @@ class ReelboostApiService {
       lim = (meta['postAnalyzeLimit'] as num?)?.toInt();
       rem = (meta['postAnalyzeRemaining'] as num?)?.toInt();
       adRem = (meta['postAnalyzeAdRewardsRemaining'] as num?)?.toInt();
-      if (kDebugMode) {
-        developer.log(
-          'post/analyze meta: isPremium=$isPremium, limit=$lim, remaining=$rem',
-          name: 'ReelboostApiService',
-        );
-      }
     }
     if (!isPremium) {
       final limH = _rateLimitIntHeader(res, 'x-ratelimit-limit');
       final remH = _rateLimitIntHeader(res, 'x-ratelimit-remaining');
       if (limH != null) lim = limH;
       if (remH != null) rem = remH;
-      if (kDebugMode) {
-        developer.log(
-          'post/analyze rate headers: limit=$limH, remaining=$remH',
-          name: 'ReelboostApiService',
-        );
-      }
     }
     return PostAnalyzeResponse(
       result: PostAnalysisResult.fromJson(data),

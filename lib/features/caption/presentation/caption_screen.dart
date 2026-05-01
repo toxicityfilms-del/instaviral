@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reelboost_ai/core/premium/premium_checkout.dart';
+import 'package:reelboost_ai/core/premium/premium_monthly_pitch_dialog.dart';
 import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
+import 'package:reelboost_ai/core/utils/ai_credits_limit_dialog.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
-import 'package:reelboost_ai/core/utils/shared_ai_limit_dialog.dart';
 import 'package:reelboost_ai/models/caption_models.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
+import 'package:reelboost_ai/widgets/ai_result_source_label.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:reelboost_ai/widgets/section_title.dart';
 
@@ -20,6 +23,7 @@ class CaptionScreen extends ConsumerStatefulWidget {
 class _CaptionScreenState extends ConsumerState<CaptionScreen> {
   final _idea = TextEditingController();
   CaptionResult? _result;
+  String? _resultSource;
   bool _loading = false;
 
   @override
@@ -39,7 +43,10 @@ class _CaptionScreenState extends ConsumerState<CaptionScreen> {
     final session = ref.read(authControllerProvider).asData?.value;
     try {
       final r = await api.generateCaption(t);
-      setState(() => _result = r.value);
+      setState(() {
+        _result = r.value;
+        _resultSource = r.source;
+      });
       if (session != null && r.limit != null && r.remaining != null) {
         ref.read(authControllerProvider.notifier).applyUser(
               session.withPostAnalyzeUsage(
@@ -56,9 +63,13 @@ class _CaptionScreenState extends ConsumerState<CaptionScreen> {
       }
     } on PostAnalyzeLimitException catch (e) {
       if (!mounted) return;
-      final detail =
-          e.message.trim().isNotEmpty ? e.message.trim() : kSharedAiDailyLimitMessage;
-      await showSharedAiDailyLimitDialog(context, serverDetail: detail, limit: e.limit);
+      await showAiCreditsLimitDialog(
+        context,
+        onUpgrade: () => showPremiumMonthlyPitchDialog(
+          context,
+          onDebugStartPurchase: () => attemptPremiumRazorpayCheckout(ref, context),
+        ),
+      );
       final s = ref.read(authControllerProvider).asData?.value;
       if (s != null) {
         ref.read(authControllerProvider.notifier).applyUser(
@@ -107,6 +118,7 @@ class _CaptionScreenState extends ConsumerState<CaptionScreen> {
                 ),
                 if (_result != null) ...[
                   const SizedBox(height: 28),
+                  AiResultSourceLabel(source: _resultSource),
                   const SectionTitle('Viral caption'),
                   _CopyCard(_result!.caption),
                   const SizedBox(height: 16),

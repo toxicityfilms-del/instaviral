@@ -40,9 +40,7 @@ abstract final class AdUnitIds {
       !kDebugMode && banner.isNotEmpty && interstitial.isNotEmpty && rewarded.isNotEmpty;
 
   /// Release builds must not use Google test ad units. When `false`, do not initialize or load ads.
-  ///
-  /// TODO(AdMob): Pass real unit IDs at build time, e.g.
-  /// `--dart-define=ADMOB_BANNER_ID=... --dart-define=ADMOB_INTERSTITIAL_ID=... --dart-define=ADMOB_REWARDED_ID=...`
+  /// Supply real IDs at build time: `ADMOB_BANNER_ID`, `ADMOB_INTERSTITIAL_ID`, `ADMOB_REWARDED_ID` (and Android `ADMOB_APP_ID` in manifest if required).
   static bool get adsEnabledForCurrentBuild {
     if (kDebugMode) return true;
     return isConfiguredForRelease;

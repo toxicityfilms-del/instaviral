@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reelboost_ai/core/premium/premium_checkout.dart';
+import 'package:reelboost_ai/core/premium/premium_monthly_pitch_dialog.dart';
 import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
+import 'package:reelboost_ai/core/utils/ai_credits_limit_dialog.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
-import 'package:reelboost_ai/core/utils/shared_ai_limit_dialog.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
+import 'package:reelboost_ai/widgets/ai_result_source_label.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:reelboost_ai/widgets/section_title.dart';
 
@@ -18,6 +21,7 @@ class IdeasScreen extends ConsumerStatefulWidget {
 class _IdeasScreenState extends ConsumerState<IdeasScreen> {
   final _niche = TextEditingController();
   List<String> _ideas = [];
+  String? _ideasSource;
   bool _loading = false;
 
   @override
@@ -32,12 +36,16 @@ class _IdeasScreenState extends ConsumerState<IdeasScreen> {
     setState(() {
       _loading = true;
       _ideas = [];
+      _ideasSource = null;
     });
     final api = ref.read(reelboostApiProvider);
     final session = ref.read(authControllerProvider).asData?.value;
     try {
       final r = await api.generateIdeas(n);
-      setState(() => _ideas = r.value);
+      setState(() {
+        _ideas = r.value;
+        _ideasSource = r.source;
+      });
       if (session != null && r.limit != null && r.remaining != null) {
         ref.read(authControllerProvider.notifier).applyUser(
               session.withPostAnalyzeUsage(
@@ -54,9 +62,13 @@ class _IdeasScreenState extends ConsumerState<IdeasScreen> {
       }
     } on PostAnalyzeLimitException catch (e) {
       if (!mounted) return;
-      final detail =
-          e.message.trim().isNotEmpty ? e.message.trim() : kSharedAiDailyLimitMessage;
-      await showSharedAiDailyLimitDialog(context, serverDetail: detail, limit: e.limit);
+      await showAiCreditsLimitDialog(
+        context,
+        onUpgrade: () => showPremiumMonthlyPitchDialog(
+          context,
+          onDebugStartPurchase: () => attemptPremiumRazorpayCheckout(ref, context),
+        ),
+      );
       final s = ref.read(authControllerProvider).asData?.value;
       if (s != null) {
         ref.read(authControllerProvider.notifier).applyUser(
@@ -98,13 +110,16 @@ class _IdeasScreenState extends ConsumerState<IdeasScreen> {
                 ),
                 const SizedBox(height: 20),
                 GradientButton(
-                  label: 'Generate 10 ideas',
+                  label: 'Generate 5 ideas',
                   loading: _loading,
                   onPressed: _loading ? null : _run,
                   icon: Icons.movie_filter_rounded,
                 ),
                 const SizedBox(height: 24),
-                if (_ideas.isNotEmpty) const SectionTitle('Ideas'),
+                if (_ideas.isNotEmpty) ...[
+                  AiResultSourceLabel(source: _ideasSource),
+                  const SectionTitle('Ideas'),
+                ],
                 Expanded(
                   child: ListView.separated(
                     itemCount: _ideas.length,

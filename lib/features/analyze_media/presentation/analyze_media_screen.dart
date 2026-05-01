@@ -10,12 +10,16 @@ import 'package:image_picker/image_picker.dart';
 import 'package:reelboost_ai/core/haptics/app_haptics.dart';
 import 'package:reelboost_ai/core/l10n/app_strings.dart';
 import 'package:reelboost_ai/core/notifications/local_notifications_service.dart';
+import 'package:reelboost_ai/core/premium/premium_checkout.dart';
+import 'package:reelboost_ai/core/premium/premium_monthly_pitch_dialog.dart';
 import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/services/analysis_history_service.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
+import 'package:reelboost_ai/core/utils/ai_credits_limit_dialog.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
 import 'package:reelboost_ai/core/utils/post_analysis_pack.dart';
 import 'package:reelboost_ai/models/post_analysis_models.dart';
+import 'package:reelboost_ai/services/reelboost_api_service.dart';
 import 'package:reelboost_ai/widgets/app_card.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:video_player/video_player.dart';
@@ -208,6 +212,17 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       );
 
+      if (session != null) {
+        ref.read(authControllerProvider.notifier).applyUser(
+              session.withPostAnalyzeUsage(
+                isPremium: response.isPremium,
+                postAnalyzeLimit: response.postAnalyzeLimit ?? session.postAnalyzeLimit,
+                postAnalyzeRemaining: response.postAnalyzeRemaining ?? session.postAnalyzeRemaining,
+                postAnalyzeAdRewardsRemaining: response.postAnalyzeAdRewardsRemaining ??
+                    session.postAnalyzeAdRewardsRemaining,
+              ),
+            );
+      }
       if (!mounted) return;
       setState(() => _result = response.result);
       AppHaptics.success();
@@ -221,15 +236,48 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
           result: response.result,
         ),
       );
+      final rem = response.postAnalyzeRemaining;
+      if (response.isPremium != true && rem != null && rem <= 0) {
+        showLastFreeAiUseSnackBar(
+          context,
+          onUpgrade: () => showPremiumMonthlyPitchDialog(
+            context,
+            onDebugStartPurchase: () => attemptPremiumRazorpayCheckout(ref, context),
+          ),
+        );
+      }
+    } on PostAnalyzeLimitException catch (e) {
+      if (!mounted) return;
+      await showAiCreditsLimitDialog(
+        context,
+        onUpgrade: () => showPremiumMonthlyPitchDialog(
+          context,
+          onDebugStartPurchase: () => attemptPremiumRazorpayCheckout(ref, context),
+        ),
+      );
+      final s = ref.read(authControllerProvider).asData?.value;
+      if (s != null) {
+        ref.read(authControllerProvider.notifier).applyUser(
+              s.withPostAnalyzeUsage(
+                isPremium: false,
+                postAnalyzeLimit: e.limit ?? s.postAnalyzeLimit,
+                postAnalyzeRemaining: 0,
+                postAnalyzeAdRewardsRemaining: s.postAnalyzeAdRewardsRemaining,
+              ),
+            );
+      }
     } catch (e) {
       if (!mounted) return;
       final strings = ref.read(appStringsProvider);
       final msg = analyzePostErrorMessageLocalized(e, strings);
+      final showRetry = isRetryableAnalyzeError(e);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(msg),
           duration: const Duration(seconds: 8),
-          action: SnackBarAction(label: strings.retry, onPressed: _analyze),
+          action: showRetry
+              ? SnackBarAction(label: strings.retry, onPressed: _analyze)
+              : null,
         ),
       );
     } finally {

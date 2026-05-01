@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reelboost_ai/core/premium/premium_checkout.dart';
+import 'package:reelboost_ai/core/premium/premium_monthly_pitch_dialog.dart';
 import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
+import 'package:reelboost_ai/core/utils/ai_credits_limit_dialog.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
-import 'package:reelboost_ai/core/utils/shared_ai_limit_dialog.dart';
 import 'package:reelboost_ai/models/hashtag_models.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
+import 'package:reelboost_ai/widgets/ai_result_source_label.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:reelboost_ai/widgets/section_title.dart';
 
@@ -20,6 +23,7 @@ class _HashtagScreenState extends ConsumerState<HashtagScreen> with SingleTicker
   final _keyword = TextEditingController();
   late TabController _tabs;
   HashtagBuckets? _result;
+  String? _resultSource;
   bool _loading = false;
 
   @override
@@ -41,6 +45,7 @@ class _HashtagScreenState extends ConsumerState<HashtagScreen> with SingleTicker
     setState(() {
       _loading = true;
       _result = null;
+      _resultSource = null;
     });
     final api = ref.read(reelboostApiProvider);
     final session = ref.read(authControllerProvider).asData?.value;
@@ -63,9 +68,13 @@ class _HashtagScreenState extends ConsumerState<HashtagScreen> with SingleTicker
       }
     } on PostAnalyzeLimitException catch (e) {
       if (!mounted) return;
-      final detail =
-          e.message.trim().isNotEmpty ? e.message.trim() : kSharedAiDailyLimitMessage;
-      await showSharedAiDailyLimitDialog(context, serverDetail: detail, limit: e.limit);
+      await showAiCreditsLimitDialog(
+        context,
+        onUpgrade: () => showPremiumMonthlyPitchDialog(
+          context,
+          onDebugStartPurchase: () => attemptPremiumRazorpayCheckout(ref, context),
+        ),
+      );
       final s = ref.read(authControllerProvider).asData?.value;
       if (s != null) {
         ref.read(authControllerProvider.notifier).applyUser(
@@ -107,13 +116,14 @@ class _HashtagScreenState extends ConsumerState<HashtagScreen> with SingleTicker
                 ),
                 const SizedBox(height: 20),
                 GradientButton(
-                  label: 'Generate 30 hashtags',
+                  label: 'Generate hashtags',
                   loading: _loading,
                   onPressed: _loading ? null : _run,
                   icon: Icons.bolt_rounded,
                 ),
                 const SizedBox(height: 24),
                 if (_result != null) ...[
+                  AiResultSourceLabel(source: _resultSource),
                   const SectionTitle('Competition buckets'),
                   TabBar(
                     controller: _tabs,
