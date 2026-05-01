@@ -1,6 +1,6 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reelboost_ai/core/navigation/root_navigator.dart';
 import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
@@ -34,21 +34,37 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _busy = true);
     try {
+      // Persists JWT + user; [authControllerProvider] becomes logged-in (same as login).
       await ref.read(authControllerProvider.notifier).signup(
             _email.text.trim(),
             _password.text,
             name: _name.text.trim(),
           );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account created')),
-        );
-      }
+      if (!mounted) return;
+      // Remove this route so [AuthGate]’s PostLoginShell is visible (was covered by push).
+      Navigator.of(context).pop();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = rootNavigatorKey.currentContext;
+        if (ctx != null && ctx.mounted) {
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            const SnackBar(
+              content: Text('Account created successfully'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      });
     } catch (e) {
       if (!mounted) return;
+      final msg = e is AuthException ? e.message : apiErrorMessage(e);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e is AuthException ? e.message : apiErrorMessage(e))),
+        SnackBar(content: Text(msg.isEmpty ? 'Sign up failed. Please try again.' : msg)),
       );
+      final lower = msg.toLowerCase();
+      final backToLogin = lower.contains('invalid auth') || msg == 'Invalid auth response';
+      if (backToLogin) {
+        Navigator.of(context).pop();
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

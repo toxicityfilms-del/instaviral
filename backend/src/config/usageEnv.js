@@ -25,6 +25,11 @@ function readFreePostAnalyzeDaily() {
 
 const FREE_POST_ANALYZE_DAILY = readFreePostAnalyzeDaily();
 
+/** Premium fair use (₹199/mo — not unlimited). Env overrides optional. */
+const PREMIUM_ANALYZE_MAX_PER_MINUTE = readIntEnv('PREMIUM_ANALYZE_MAX_PER_MINUTE', 10, 1, 120);
+const PREMIUM_ANALYZE_MAX_PER_DAY = readIntEnv('PREMIUM_ANALYZE_MAX_PER_DAY', 150, 1, 10000);
+const PREMIUM_ANALYZE_MAX_PER_MONTH = readIntEnv('PREMIUM_ANALYZE_MAX_PER_MONTH', 3000, 1, 100000);
+
 /** Max rewarded-ad bonus slots per UTC day (was 5). */
 const MAX_AD_REWARD_SLOTS = readIntEnv('MAX_AD_REWARDS_PER_DAY', 5, 1, 50);
 
@@ -37,6 +42,9 @@ const AD_REWARD_COOLDOWN_MS = REWARD_COOLDOWN_SECONDS * 1000;
 
 module.exports = {
   FREE_POST_ANALYZE_DAILY,
+  PREMIUM_ANALYZE_MAX_PER_MINUTE,
+  PREMIUM_ANALYZE_MAX_PER_DAY,
+  PREMIUM_ANALYZE_MAX_PER_MONTH,
   MAX_AD_REWARD_SLOTS,
   AD_REWARD_COOLDOWN_MS,
   REWARD_COOLDOWN_SECONDS,

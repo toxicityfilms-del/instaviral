@@ -26,6 +26,7 @@ class PostAnalysisResult {
     required this.improvedCaption,
     required this.betterHashtags,
     required this.engagementTips,
+    this.lockedPremiumFields = false,
   });
 
   final int score;
@@ -38,6 +39,8 @@ class PostAnalysisResult {
   final String improvedCaption;
   final List<String> betterHashtags;
   final List<String> engagementTips;
+  /// Server: free/basic tier — hook, caption, hashtags, tips are not populated (UI shows Pro lock).
+  final bool lockedPremiumFields;
 
   factory PostAnalysisResult.fromJson(Map<String, dynamic> json) {
     final raw = json['hashtags'];
@@ -50,6 +53,7 @@ class PostAnalysisResult {
       tags = [];
     }
     final audio = json['audio'] as String? ??
+        json['audioSuggestion'] as String? ??
         json['trendingAudio'] as String? ??
         json['trending_audio'] as String? ??
         '';
@@ -79,6 +83,7 @@ class PostAnalysisResult {
       improvedCaption: (json['improvedCaption'] as String? ?? '').trim(),
       betterHashtags: betterTags,
       engagementTips: tips,
+      lockedPremiumFields: json['lockedPremiumFields'] == true,
     );
   }
 
@@ -93,5 +98,6 @@ class PostAnalysisResult {
         'improvedCaption': improvedCaption,
         'betterHashtags': betterHashtags,
         'engagementTips': engagementTips,
+        'lockedPremiumFields': lockedPremiumFields,
       };
 }

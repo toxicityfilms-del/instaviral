@@ -17,6 +17,15 @@ const userSchema = new mongoose.Schema(
     tiktokLink: { type: String, trim: true, default: '', maxlength: 500 },
     niche: { type: String, trim: true, default: '', maxlength: 120 },
     isPremium: { type: Boolean, default: false },
+    /** Fair-use counters for premium post/media analysis (UTC buckets). */
+    premiumFairUse: {
+      minuteKey: { type: String, default: '' },
+      minuteCount: { type: Number, default: 0, min: 0, max: 500 },
+      dayKey: { type: String, default: '' },
+      dayCount: { type: Number, default: 0, min: 0, max: 50000 },
+      monthKey: { type: String, default: '' },
+      monthCount: { type: Number, default: 0, min: 0, max: 500000 },
+    },
     passwordResetTokenHash: { type: String, default: '' },
     passwordResetExpiresAt: { type: Date, default: null },
     passwordResetIssuedAt: { type: Date, default: null },

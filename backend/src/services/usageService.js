@@ -1,6 +1,9 @@
 const User = require('../models/User');
 const {
   FREE_POST_ANALYZE_DAILY,
+  PREMIUM_ANALYZE_MAX_PER_MINUTE,
+  PREMIUM_ANALYZE_MAX_PER_DAY,
+  PREMIUM_ANALYZE_MAX_PER_MONTH,
   MAX_AD_REWARD_SLOTS,
   SUSPICIOUS_INVALID_AD_THRESHOLD,
 } = require('../config/usageEnv');
@@ -9,6 +12,81 @@ const MAX_REWARD_COMPLETION_AGE_MS = 15 * 60 * 1000;
 
 function utcDayString() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function utcMonthString() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+/** UTC minute bucket `YYYY-MM-DDTHH:MM` for rate limiting. */
+function utcMinuteKey(d = new Date()) {
+  const iso = d.toISOString();
+  return `${iso.slice(0, 13)}:${iso.slice(14, 16)}`;
+}
+
+/**
+ * Normalize premium fair-use counters to current UTC buckets (read-only view).
+ * @param {Record<string, unknown>} raw
+ * @param {Date} [now]
+ */
+function normalizePremiumFairUseView(raw, now = new Date()) {
+  const minK = utcMinuteKey(now);
+  const dayK = utcDayString();
+  const monthK = utcMonthString();
+  const p = raw && typeof raw === 'object' ? raw : {};
+  let minuteCount = Number(p.minuteCount) || 0;
+  let dayCount = Number(p.dayCount) || 0;
+  let monthCount = Number(p.monthCount) || 0;
+  if (p.minuteKey !== minK) minuteCount = 0;
+  if (p.dayKey !== dayK) dayCount = 0;
+  if (p.monthKey !== monthK) monthCount = 0;
+  return { minuteKey: minK, dayKey: dayK, monthKey: monthK, minuteCount, dayCount, monthCount };
+}
+
+function assertPremiumFairUseAllowed(userDoc) {
+  const v = normalizePremiumFairUseView(userDoc.premiumFairUse);
+  if (v.minuteCount >= PREMIUM_ANALYZE_MAX_PER_MINUTE) {
+    return {
+      ok: false,
+      reason: 'minute',
+      message: 'Fair usage limit reached. Try again later.',
+    };
+  }
+  if (v.dayCount >= PREMIUM_ANALYZE_MAX_PER_DAY) {
+    return { ok: false, reason: 'day', message: 'Fair usage limit reached. Try again later.' };
+  }
+  if (v.monthCount >= PREMIUM_ANALYZE_MAX_PER_MONTH) {
+    return { ok: false, reason: 'month', message: 'Fair usage limit reached. Try again later.' };
+  }
+  return { ok: true };
+}
+
+async function incrementPremiumFairUse(userId) {
+  const user = await User.findById(userId);
+  if (!user || user.isPremium !== true) return;
+  const now = new Date();
+  const minK = utcMinuteKey(now);
+  const dayK = utcDayString();
+  const monthK = utcMonthString();
+  if (!user.premiumFairUse) user.premiumFairUse = {};
+  const p = user.premiumFairUse;
+  if (p.minuteKey !== minK) {
+    p.minuteKey = minK;
+    p.minuteCount = 0;
+  }
+  if (p.dayKey !== dayK) {
+    p.dayKey = dayK;
+    p.dayCount = 0;
+  }
+  if (p.monthKey !== monthK) {
+    p.monthKey = monthK;
+    p.monthCount = 0;
+  }
+  p.minuteCount = (Number(p.minuteCount) || 0) + 1;
+  p.dayCount = (Number(p.dayCount) || 0) + 1;
+  p.monthCount = (Number(p.monthCount) || 0) + 1;
+  user.markModified('premiumFairUse');
+  await user.save();
 }
 
 /** Clamp stored usage count; free plan max analyses/day = base cap only (no ad bonuses). */
@@ -168,6 +246,18 @@ async function assertPostAnalyzeAllowed(userId) {
     };
   }
   if (user.isPremium === true) {
+    const fu = assertPremiumFairUseAllowed(user);
+    if (!fu.ok) {
+      return {
+        ok: false,
+        status: 429,
+        body: {
+          success: false,
+          code: 'FAIR_USE_LIMIT',
+          message: fu.message || 'Fair usage limit reached. Try again later.',
+        },
+      };
+    }
     return { ok: true, isPremium: true };
   }
   const today = utcDayString();
@@ -181,7 +271,7 @@ async function assertPostAnalyzeAllowed(userId) {
       body: {
         success: false,
         code: 'POST_ANALYZE_LIMIT',
-        message: `Free plan allows ${eff} post analyses per day. Upgrade to Premium for unlimited analyses.`,
+        message: 'Daily free limit reached. Upgrade to Pro.',
         limit: eff,
         used,
       },
@@ -198,7 +288,7 @@ function buildSharedAiLimitReachedBody(gateBody) {
   const lim = gateBody && typeof gateBody.limit === 'number' ? gateBody.limit : FREE_POST_ANALYZE_DAILY;
   return {
     error: 'LIMIT_REACHED',
-    message: 'Daily free limit reached. Upgrade to premium.',
+    message: 'Daily free limit reached. Upgrade to Pro.',
     limit: lim,
     remaining: 0,
   };
@@ -223,6 +313,7 @@ async function commitPostAnalyzeUsageAfterSuccess(userId) {
     };
   }
   if (user.isPremium === true) {
+    await incrementPremiumFairUse(userId);
     const meta = buildPostAnalyzeUsageMeta(user);
     return {
       isPremium: true,
@@ -349,7 +440,7 @@ async function grantAdRewardSlot(userId, { completionId, completedAtMs } = {}) {
       success: false,
       code: 'AD_REWARD_NOT_AVAILABLE',
       message:
-        'Rewarded ads do not add post analyses on the free plan. Upgrade to Premium for unlimited analyses.',
+        'Rewarded ads do not add post analyses on the free plan. Upgrade to Pro for AI analysis with fair usage limits.',
     },
   };
 }
@@ -380,8 +471,12 @@ async function resetSuspiciousAdFlags(userId) {
 
 module.exports = {
   FREE_POST_ANALYZE_DAILY,
+  PREMIUM_ANALYZE_MAX_PER_MINUTE,
+  PREMIUM_ANALYZE_MAX_PER_DAY,
+  PREMIUM_ANALYZE_MAX_PER_MONTH,
   MAX_AD_REWARD_SLOTS,
   SUSPICIOUS_INVALID_AD_THRESHOLD,
+  normalizePremiumFairUseView,
   defaultAdRewardAnalytics,
   normalizeAdRewardAnalytics,
   buildPostAnalyzeUsageMeta,

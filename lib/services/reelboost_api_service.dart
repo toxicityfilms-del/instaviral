@@ -272,8 +272,7 @@ class ReelboostApiService {
     }
   }
 
-  static const String _defaultLimitMessage =
-      "You've reached today's limit for free post analyses. Upgrade to Premium for unlimited analyses.";
+  static const String _defaultLimitMessage = 'Daily free limit reached. Upgrade to Pro.';
 
   /// `403` when free daily AI cap is hit: `error` or `code` `LIMIT_REACHED`, or `code` `POST_ANALYZE_LIMIT`.
   PostAnalyzeLimitException? _anyFreeAiLimitFromDio(DioException e) {

@@ -790,7 +790,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
                   const SizedBox(height: 36),
                   _PostAnalyzerResultsSection(
                     result: _result!,
-                    isPremium: !userIsFree,
+                    isPremium: !userIsFree && !_result!.lockedPremiumFields,
                     strings: s,
                     copyPackLabel: s.actionCopyFullPack,
                     shareButtonLabel: s.actionSharePack,

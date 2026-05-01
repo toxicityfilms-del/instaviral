@@ -1,5 +1,6 @@
 const OpenAI = require('openai');
 const { dynamicBestTime, dynamicAudio } = require('../utils/contentVariants');
+const { getPostAnalyzeCache, setPostAnalyzeCache } = require('../utils/postAnalyzeCache');
 
 /** Response tag when premium OpenAI path failed or API key is missing — local result, no 503. */
 const OPENAI_FALLBACK_SOURCE = 'fallback';
@@ -46,6 +47,56 @@ const CAPTION_MAX_WORDS = 120;
 const HASHTAG_TOTAL_MAX = 15;
 /** Output cap: reel ideas returned (premium + free templates). */
 const IDEAS_MAX = 5;
+
+function defaultEngagementTips() {
+  return [
+    'Lead with a strong pattern interrupt in the first second.',
+    'Add on-screen text for viewers on mute.',
+    'Close with a comment or save CTA that matches your hook.',
+  ];
+}
+
+/** Rule-based viral score for free tier / model fallback (no API cost). */
+function ruleBasedViralScore({ idea, niche, hasImage }) {
+  const ideaStr = String(idea || '');
+  const nicheStr = String(niche || '');
+  let s = 42;
+  if (ideaStr.trim().length > 15) s += 10;
+  if (ideaStr.trim().length > 60) s += 8;
+  if (nicheStr.trim().length > 2) s += 10;
+  if (hasImage) s += 12;
+  let h = 0;
+  for (let i = 0; i < ideaStr.length; i++) {
+    h = (h + ideaStr.charCodeAt(i) * (i + 1)) % 97;
+  }
+  s += h % 12;
+  return Math.min(91, Math.max(35, s));
+}
+
+/** Free post/media analyze — local only; lockedPremiumFields for app UI. */
+function buildFreeBasicPostPack({ idea, niche, hasImage }) {
+  const nicheStr = String(niche || '').trim();
+  const ideaStr = String(idea || '').trim();
+  const key = ideaStr || 'post';
+  const bt = dynamicBestTime(key, nicheStr);
+  const aud = dynamicAudio(key, nicheStr);
+  const score = ruleBasedViralScore({ idea: ideaStr, niche: nicheStr, hasImage: !!hasImage });
+  return {
+    score,
+    niche: nicheStr,
+    bestTime: bt,
+    audio: aud,
+    audioSuggestion: aud,
+    lockedPremiumFields: true,
+    hook: '',
+    caption: '',
+    hashtags: [],
+    improvedCaption: '',
+    betterHashtags: [],
+    engagementTips: [],
+    source: 'local',
+  };
+}
 
 function slugTopic(text) {
   const s = String(text || 'trending')
@@ -309,7 +360,7 @@ function normalizeHashtagBuckets(parsed) {
   };
 }
 
-function normalizePostAnalysis(parsed, nicheForFallback = '') {
+function normalizePostAnalysis(parsed, nicheForFallback = '', { lockedPremiumFields = false } = {}) {
   let hashtags = parsed.hashtags;
   if (typeof hashtags === 'string') {
     hashtags = hashtags
@@ -331,62 +382,104 @@ function normalizePostAnalysis(parsed, nicheForFallback = '') {
     '';
   const hook = String(parsed.hook || '').trim();
   const caption = String(parsed.caption || '').trim();
-  const niche = String(nicheForFallback || '').trim();
+  const nicheDisplay = String(parsed.niche ?? nicheForFallback ?? '').trim();
   let bestTime = String(parsed.bestTime || parsed.best_time || '').trim();
   let audio = String(audioRaw || '').trim();
   const ideaKey = caption || hook || 'post';
-  if (!bestTime) bestTime = dynamicBestTime(ideaKey, niche);
-  if (!audio) audio = dynamicAudio(ideaKey, niche);
+  if (!bestTime) bestTime = dynamicBestTime(ideaKey, nicheDisplay);
+  if (!audio) audio = dynamicAudio(ideaKey, nicheDisplay);
   const cappedTags = hashtags.map(ensureHash).filter(Boolean).slice(0, HASHTAG_TOTAL_MAX);
+  const cap = truncateToMaxWords(caption, CAPTION_MAX_WORDS);
+  let score;
+  if (typeof parsed.score === 'number' && Number.isFinite(parsed.score)) {
+    score = Math.min(100, Math.max(0, Math.round(parsed.score)));
+  } else {
+    score = ruleBasedViralScore({ idea: cap || hook, niche: nicheDisplay, hasImage: false });
+  }
+  let tips = Array.isArray(parsed.engagementTips)
+    ? parsed.engagementTips.map(String).filter(Boolean).slice(0, 6)
+    : [];
+  if (!lockedPremiumFields && !tips.length) tips = defaultEngagementTips();
+  const improvedRaw = String(parsed.improvedCaption || cap || '').trim();
+  const improvedCaption = truncateToMaxWords(improvedRaw, CAPTION_MAX_WORDS);
+  let betterHashtags = cappedTags;
+  if (Array.isArray(parsed.betterHashtags) && parsed.betterHashtags.length > 0) {
+    betterHashtags = parsed.betterHashtags.map(ensureHash).filter(Boolean).slice(0, HASHTAG_TOTAL_MAX);
+  }
   return {
+    score,
+    niche: nicheDisplay,
     hook,
-    caption: truncateToMaxWords(caption, CAPTION_MAX_WORDS),
+    caption: cap,
     hashtags: cappedTags,
     bestTime,
     audio,
+    audioSuggestion: audio,
+    improvedCaption: improvedCaption || cap,
+    betterHashtags,
+    engagementTips: tips,
+    lockedPremiumFields,
   };
 }
 
 /**
- * free path — no OpenAI cost (post/analyze-media when not premium).
+ * Local full pack when OpenAI unavailable (premium path) — not the free tier basic pack.
  */
 function fallbackPostAnalysis(idea, hasImage, niche) {
   const hint = String(idea || (hasImage ? 'this visual' : 'your reel')).trim() || 'your reel';
   const nicheHint = String(niche || '').trim();
   const captionRaw = `This is your sign to post ✨\n\n${hint}\n\nComment “FIRE” if you’d watch the full story. #reels #fyp #viral #explorepage`;
+  const cap = truncateToMaxWords(captionRaw, CAPTION_MAX_WORDS);
+  const tags = [
+    '#reels',
+    '#fyp',
+    '#viral',
+    '#explorepage',
+    '#instagram',
+    '#trending',
+    '#creator',
+    '#content',
+    '#growth',
+    '#instagood',
+    '#reelitfeelit',
+    '#explore',
+    '#photooftheday',
+    '#love',
+    '#instadaily',
+  ].slice(0, HASHTAG_TOTAL_MAX);
+  const hook = `POV: you’re about to blow up with ${hint.slice(0, 40)}${hint.length > 40 ? '…' : ''}`;
+  const bt = dynamicBestTime(hint, nicheHint);
+  const aud = dynamicAudio(hint, nicheHint);
+  const score = ruleBasedViralScore({ idea: hint, niche: nicheHint, hasImage: !!hasImage });
   return {
-    hook: `POV: you’re about to blow up with ${hint.slice(0, 40)}${hint.length > 40 ? '…' : ''}`,
-    caption: truncateToMaxWords(captionRaw, CAPTION_MAX_WORDS),
-    hashtags: [
-      '#reels',
-      '#fyp',
-      '#viral',
-      '#explorepage',
-      '#instagram',
-      '#trending',
-      '#creator',
-      '#content',
-      '#growth',
-      '#instagood',
-      '#reelitfeelit',
-      '#explore',
-      '#photooftheday',
-      '#love',
-      '#instadaily',
-    ].slice(0, HASHTAG_TOTAL_MAX),
-    bestTime: dynamicBestTime(hint, nicheHint),
-    audio: dynamicAudio(hint, nicheHint),
+    score,
+    niche: nicheHint,
+    hook,
+    caption: cap,
+    hashtags: tags,
+    bestTime: bt,
+    audio: aud,
+    audioSuggestion: aud,
+    improvedCaption: cap,
+    betterHashtags: tags,
+    engagementTips: defaultEngagementTips(),
+    lockedPremiumFields: false,
   };
 }
 
-async function analyzePost({ idea, imageBase64, niche, bio, enableOpenAi = true }) {
+async function analyzePost({ idea, imageBase64, niche, bio, enableOpenAi = true, userId = '' }) {
   const hasImage = !!(imageBase64 && String(imageBase64).trim());
   const ideaStr = String(idea || '').trim();
   const nicheStr = String(niche || '').trim();
   const bioStr = String(bio || '').trim().slice(0, 400);
   if (!enableOpenAi) {
-    // free path — no OpenAI cost
-    return fallbackPostAnalysis(ideaStr, hasImage, nicheStr);
+    // free path — no OpenAI cost (basic score + timing/audio only; app locks advanced fields)
+    return buildFreeBasicPostPack({ idea: ideaStr, niche: nicheStr, hasImage });
+  }
+  const cacheParts = ['v3post', ideaStr.slice(0, 1200), nicheStr, hasImage ? '1' : '0', bioStr.slice(0, 200)];
+  const cached = getPostAnalyzeCache(userId, cacheParts);
+  if (cached) {
+    return { ...cached, source: 'cache' };
   }
   try {
     const client = tryGetClient();
@@ -396,9 +489,9 @@ async function analyzePost({ idea, imageBase64, niche, bio, enableOpenAi = true 
       console.warn('[OpenAI] OPENAI_API_KEY missing — post analyze local fallback (source=fallback)');
       return { ...fallbackPostAnalysis(ideaStr, hasImage, nicheStr), source: OPENAI_FALLBACK_SOURCE };
     }
-    // premium path — OpenAI enabled (gpt-4o-mini); caps: caption words + hashtag count
+    // premium path — OpenAI enabled (gpt-4o-mini); tight max_tokens; duplicate requests served from cache
     const sys =
-      'You analyze Instagram posts and Reels. Reply with ONLY valid JSON (no markdown, no code fences). Keys: hook (string), caption (string, max 120 words), hashtags (array of exactly 15 strings, each starting with #), bestTime (string), audio (string — trending audio suggestion). bestTime and audio must be tailored to THIS specific idea (vary wording and reasoning; do not reuse the same generic posting window or audio line across different ideas). When the user message includes a concrete creator niche, reflect it consistently in hook tone, caption wording, all hashtags, posting-window reasoning, and audio suggestion.';
+      'You analyze Instagram posts and Reels. Reply with ONLY valid JSON (no markdown, no code fences). Keys: hook (string), caption (string, max 120 words), hashtags (array of exactly 15 strings, each starting with #), bestTime (string), audio (string — trending audio suggestion), niche (string — creator niche echo or refined label), score (integer 0-100 viral fit for this post), engagementTips (array of exactly 4 short actionable strings for Reels). bestTime and audio must be tailored to THIS specific idea (vary wording and reasoning; do not reuse the same generic posting window or audio line across different ideas). When the user message includes a concrete creator niche, reflect it consistently in hook tone, caption wording, all hashtags, posting-window reasoning, and audio suggestion.';
     const nicheLine = nicheStr || '(not set — treat as general / broad audience)';
     const ideaLine =
       ideaStr || (hasImage ? '(No text idea — infer from the attached image.)' : '(No idea text provided.)');
@@ -440,12 +533,15 @@ Idea: ${ideaLine}`;
       model: 'gpt-4o-mini',
       messages: [{ role: 'system', content: sys }, userMessage],
       temperature: 0.75,
-      max_tokens: 900,
+      max_tokens: 650,
     });
 
     const text = completion.choices[0]?.message?.content?.trim() || '{}';
     const parsed = safeJsonParse(text);
-    return normalizePostAnalysis(parsed, nicheStr);
+    const out = normalizePostAnalysis(parsed, nicheStr, { lockedPremiumFields: false });
+    const final = { ...out, source: OPENAI_PRIMARY_SOURCE };
+    setPostAnalyzeCache(userId, cacheParts, final);
+    return final;
   } catch (e) {
     const reason = isQuotaOrRateLimitError(e) ? 'quota/rate limit' : (e?.message || 'error');
     // eslint-disable-next-line no-console
@@ -567,7 +663,7 @@ Rules:
       model: 'gpt-4o-mini',
       messages: [{ role: 'system', content: sys }, userMessage],
       temperature: 0.2,
-      max_tokens: 700,
+      max_tokens: 480,
     });
 
     const text = completion.choices[0]?.message?.content?.trim() || '{}';
@@ -601,15 +697,29 @@ Rules:
   }
 }
 
-async function analyzeMediaPost({ niche, bio, userNotes, mediaContext, enableOpenAi = true }) {
+async function analyzeMediaPost({
+  niche,
+  bio,
+  userNotes,
+  mediaContext,
+  enableOpenAi = true,
+  userId = '',
+  thumbnailFingerprint = 0,
+}) {
   const nicheStr = String(niche || '').trim();
   const bioStr = String(bio || '').trim().slice(0, 400);
   const notes = String(userNotes || '').trim().slice(0, 600);
 
   if (!enableOpenAi) {
-    // free path — no OpenAI cost
+    // free path — no OpenAI cost (basic pack only)
     const hint = mediaContext?.description || notes || 'this post';
-    return fallbackPostAnalysis(hint, false, nicheStr);
+    return buildFreeBasicPostPack({ idea: hint, niche: nicheStr, hasImage: true });
+  }
+  const ctxStub = JSON.stringify(mediaContext || {}).slice(0, 1500);
+  const cacheParts = ['v3media', nicheStr, notes.slice(0, 400), bioStr.slice(0, 200), String(thumbnailFingerprint), ctxStub];
+  const cached = getPostAnalyzeCache(userId, cacheParts);
+  if (cached) {
+    return { ...cached, source: 'cache' };
   }
   try {
     const client = tryGetClient();
@@ -620,9 +730,9 @@ async function analyzeMediaPost({ niche, bio, userNotes, mediaContext, enableOpe
       const hint = mediaContext?.description || notes || 'this post';
       return { ...fallbackPostAnalysis(hint, false, nicheStr), source: OPENAI_FALLBACK_SOURCE };
     }
-    // premium path — OpenAI enabled (gpt-4o-mini); caps: caption ≤120 words, 15 hashtags
+    // premium path — OpenAI enabled (gpt-4o-mini); tight token cap; cache by user + context fingerprint
     const sys =
-      'You analyze Instagram Reels/posts. Reply with ONLY valid JSON (no markdown, no code fences). Keys: hook (string, a 3-second hook), caption (string, max 120 words), hashtags (array of exactly 15 strings, each starting with #), bestTime (string), audio (string — trending audio suggestion). The output MUST be specific to the described media (not generic). bestTime and audio must change when the media context or niche changes (no copy-paste generic lines). If niche is provided, align hook tone, caption voice, EVERY hashtag, bestTime advice, and audio pick to that niche.';
+      'You analyze Instagram Reels/posts. Reply with ONLY valid JSON (no markdown, no code fences). Keys: hook (string, a 3-second hook), caption (string, max 120 words), hashtags (array of exactly 15 strings, each starting with #), bestTime (string), audio (string — trending audio suggestion), niche (string), score (integer 0-100), engagementTips (array of exactly 4 short actionable strings). The output MUST be specific to the described media (not generic). bestTime and audio must change when the media context or niche changes (no copy-paste generic lines). If niche is provided, align hook tone, caption voice, EVERY hashtag, bestTime advice, and audio pick to that niche.';
 
     const ctx = mediaContext || {};
     const ctxJson = JSON.stringify(
@@ -668,12 +778,15 @@ Hard rules:
       model: 'gpt-4o-mini',
       messages: [{ role: 'system', content: sys }, { role: 'user', content: userText }],
       temperature: 0.75,
-      max_tokens: 1000,
+      max_tokens: 720,
     });
 
     const text = completion.choices[0]?.message?.content?.trim() || '{}';
     const parsed = safeJsonParse(text);
-    return normalizePostAnalysis(parsed, nicheStr);
+    const out = normalizePostAnalysis(parsed, nicheStr, { lockedPremiumFields: false });
+    const final = { ...out, source: OPENAI_PRIMARY_SOURCE };
+    setPostAnalyzeCache(userId, cacheParts, final);
+    return final;
   } catch (e) {
     const reason = isQuotaOrRateLimitError(e) ? 'quota/rate limit' : (e?.message || 'error');
     // eslint-disable-next-line no-console

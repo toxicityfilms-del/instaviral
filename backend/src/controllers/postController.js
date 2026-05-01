@@ -22,13 +22,14 @@ async function analyze(req, res, next) {
     const imageBase64 = req.body.imageBase64;
     const niche = req.body.niche;
     const bio = req.body.bio;
-    // free path: local pack. premium: OpenAI — missing key / error → local pack + data.source "fallback" (200).
+    // free path: basic local pack (no OpenAI). premium: OpenAI + per-user cache; missing key → local fallback.
     const data = await analyzePost({
       idea,
       imageBase64,
       niche,
       bio,
       enableOpenAi: gate.isPremium === true,
+      userId: String(id),
     });
     const meta = await commitPostAnalyzeUsageAfterSuccess(id);
     if (meta.postAnalyzeRemaining != null) {
@@ -74,8 +75,9 @@ async function analyzeMedia(req, res, next) {
 
     const file = req.file;
     const thumbnailDataUrl = req.body.thumbnailDataUrl;
+    const thumbFp = thumbnailDataUrl ? String(thumbnailDataUrl).length : 0;
 
-    // free path: heuristic ctx + local pack. premium: vision + OpenAI — failures → local + source "fallback" on affected objects (200).
+    // free path: heuristic ctx + basic pack (no OpenAI). premium: vision + OpenAI + cache.
     const ctx = await extractMediaContext({
       imageDataUrl: thumbnailDataUrl,
       file,
@@ -90,6 +92,8 @@ async function analyzeMedia(req, res, next) {
       userNotes,
       mediaContext: ctx,
       enableOpenAi: gate.isPremium === true,
+      userId: String(id),
+      thumbnailFingerprint: thumbFp,
     });
 
     const meta = await commitPostAnalyzeUsageAfterSuccess(id);

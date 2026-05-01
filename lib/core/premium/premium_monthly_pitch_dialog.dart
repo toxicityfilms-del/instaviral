@@ -12,11 +12,12 @@ Future<void> showPremiumMonthlyPitchDialog(
     barrierDismissible: true,
     builder: (ctx) => AlertDialog(
       icon: Icon(Icons.workspace_premium_rounded, color: AppTheme.accent.withValues(alpha: 0.95), size: 36),
-      title: const Text('Upgrade to Premium'),
+      title: const Text('Upgrade to Pro'),
       content: const Text(
-        'ReelBoost Premium — ₹199/month\n\n'
-        'Unlimited AI: captions, hashtags, reel ideas, post analysis, and analyze media. '
-        'Free accounts are limited to 3 AI credits per day.',
+        'ReelBoost Pro — ₹199/month\n\n'
+        'AI-powered captions, hashtags, reel ideas, post analysis, and media analysis — '
+        'unlimited with a fair usage policy (rate limits apply). '
+        'Free accounts get 3 basic analyses per day (no OpenAI).',
       ),
       actions: [
         TextButton(

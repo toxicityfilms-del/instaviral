@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:reelboost_ai/core/ads/ad_policy.dart';
 import 'package:reelboost_ai/core/haptics/app_haptics.dart';
 import 'package:reelboost_ai/core/l10n/app_strings.dart';
 import 'package:reelboost_ai/core/notifications/local_notifications_service.dart';
@@ -307,6 +308,11 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
   Widget build(BuildContext context) {
     final r = _result;
     final s = ref.watch(appStringsProvider);
+    final session = ref.watch(authControllerProvider).asData?.value;
+    final showPremiumFields = r != null &&
+        session != null &&
+        AdPolicy.isPremium(session) &&
+        !r.lockedPremiumFields;
 
     return Scaffold(
       appBar: AppBar(
@@ -490,6 +496,7 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
                   const SizedBox(height: 16),
                   _ResultsCard(
                     result: r,
+                    showPremiumFields: showPremiumFields,
                     onCopy: _copy,
                     copyPackLabel: s.actionCopyFullPack,
                     snackCopied: s.snackFullPackCopied,
@@ -511,6 +518,7 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
 class _ResultsCard extends StatelessWidget {
   const _ResultsCard({
     required this.result,
+    required this.showPremiumFields,
     required this.onCopy,
     required this.copyPackLabel,
     required this.snackCopied,
@@ -521,6 +529,7 @@ class _ResultsCard extends StatelessWidget {
   });
 
   final PostAnalysisResult result;
+  final bool showPremiumFields;
   final Future<void> Function(String text, String msg) onCopy;
   final String copyPackLabel;
   final String snackCopied;
@@ -584,6 +593,30 @@ class _ResultsCard extends StatelessWidget {
           style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 10),
+        AppCard(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.insights_rounded, color: pc.withValues(alpha: 0.88), size: 20),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Viral score',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${result.score} · Niche: ${result.niche.isEmpty ? "—" : result.niche}',
+                style: TextStyle(color: pc.withValues(alpha: 0.88), height: 1.35),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
         FilledButton.tonalIcon(
           onPressed: () => onCopy(postAnalysisCopyPack(result), snackCopied),
           icon: const Icon(Icons.copy_all_rounded),
@@ -615,72 +648,95 @@ class _ResultsCard extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        section(
-          title: '3‑second hook',
-          value: result.hook,
-          icon: Icons.flash_on_rounded,
-          copyLabel: 'Hook copied',
-          copyValue: result.hook,
-        ),
-        const SizedBox(height: 12),
-        section(
-          title: 'Caption',
-          value: result.caption,
-          icon: Icons.format_quote_rounded,
-          copyLabel: 'Caption copied',
-          copyValue: result.caption,
-        ),
-        const SizedBox(height: 12),
-        AppCard(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.tag_rounded, color: pc.withValues(alpha: 0.88), size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Hashtags (30)',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: tagsText.trim().isEmpty ? null : () => onCopy(tagsText, 'Hashtags copied'),
-                    child: const Text('Copy'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: tags.isEmpty
-                    ? [
-                        Text(
-                          '—',
-                          style: TextStyle(color: sc),
-                        ),
-                      ]
-                    : tags.map((t) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                          decoration: BoxDecoration(
-                            color: chipBg,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: pc.withValues(alpha: 0.1)),
-                          ),
-                          child: Text(
-                            t,
-                            style: TextStyle(color: pc, fontWeight: FontWeight.w600),
-                          ),
-                        );
-                      }).toList(),
-              ),
-            ],
+        if (showPremiumFields) ...[
+          section(
+            title: '3‑second hook',
+            value: result.hook,
+            icon: Icons.flash_on_rounded,
+            copyLabel: 'Hook copied',
+            copyValue: result.hook,
           ),
-        ),
+          const SizedBox(height: 12),
+          section(
+            title: 'Caption',
+            value: result.caption,
+            icon: Icons.format_quote_rounded,
+            copyLabel: 'Caption copied',
+            copyValue: result.caption,
+          ),
+          const SizedBox(height: 12),
+          AppCard(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.tag_rounded, color: pc.withValues(alpha: 0.88), size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Hashtags (15)',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: tagsText.trim().isEmpty ? null : () => onCopy(tagsText, 'Hashtags copied'),
+                      child: const Text('Copy'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: tags.isEmpty
+                      ? [
+                          Text(
+                            '—',
+                            style: TextStyle(color: sc),
+                          ),
+                        ]
+                      : tags.map((t) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: chipBg,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: pc.withValues(alpha: 0.1)),
+                            ),
+                            child: Text(
+                              t,
+                              style: TextStyle(color: pc, fontWeight: FontWeight.w600),
+                            ),
+                          );
+                        }).toList(),
+                ),
+              ],
+            ),
+          ),
+        ] else ...[
+          AppCard(
+            padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
+            child: Column(
+              children: [
+                Icon(Icons.lock_rounded, color: pc.withValues(alpha: 0.65), size: 32),
+                const SizedBox(height: 10),
+                Text(
+                  'Pro: hook, caption & AI hashtags',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Free includes score, timing & audio only. Upgrade for full AI.',
+                  style: TextStyle(color: sc, height: 1.35, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         section(
           title: 'Best time to post',
