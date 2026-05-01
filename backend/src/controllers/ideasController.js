@@ -5,6 +5,7 @@ const {
   buildSharedAiLimitReachedBody,
   commitPostAnalyzeUsageAfterSuccess,
 } = require('../services/usageService');
+const { logAiFeatureUsage } = require('../utils/aiUsageLog');
 
 function userId(req) {
   return req.user?.sub;
@@ -25,7 +26,9 @@ async function generate(req, res, next) {
       return res.status(gate.status).json(gate.body);
     }
     const { niche } = req.body;
-    const ideas = await generateIdeas(niche);
+    // free path: local templates only; premium path: OpenAI (gpt-4o-mini); missing key → data.source === "fallback"
+    const data = await generateIdeas(niche, { enableOpenAi: gate.isPremium === true });
+    logAiFeatureUsage({ userId: id, feature: 'ideas', data });
     const meta = await commitPostAnalyzeUsageAfterSuccess(id);
     if (!meta.isPremium) {
       if (meta.postAnalyzeRemaining != null) {
@@ -37,7 +40,7 @@ async function generate(req, res, next) {
     }
     return res.json({
       success: true,
-      data: { ideas },
+      data,
       limit: meta.postAnalyzeLimit,
       remaining: meta.postAnalyzeRemaining,
     });

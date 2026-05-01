@@ -5,6 +5,7 @@ const {
   buildSharedAiLimitReachedBody,
   commitPostAnalyzeUsageAfterSuccess,
 } = require('../services/usageService');
+const { logAiFeatureUsage } = require('../utils/aiUsageLog');
 
 function userId(req) {
   return req.user?.sub;
@@ -25,7 +26,9 @@ async function generate(req, res, next) {
       return res.status(gate.status).json(gate.body);
     }
     const { idea } = req.body;
-    const data = await generateCaptionAndHooks(idea);
+    // free path: local templates; premium: OpenAI — missing key / error → local + data.source "fallback" (200)
+    const data = await generateCaptionAndHooks(idea, { enableOpenAi: gate.isPremium === true });
+    logAiFeatureUsage({ userId: id, feature: 'caption', data });
     const meta = await commitPostAnalyzeUsageAfterSuccess(id);
     if (!meta.isPremium) {
       if (meta.postAnalyzeRemaining != null) {

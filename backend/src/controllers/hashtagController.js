@@ -5,6 +5,7 @@ const {
   buildSharedAiLimitReachedBody,
   commitPostAnalyzeUsageAfterSuccess,
 } = require('../services/usageService');
+const { logAiFeatureUsage } = require('../utils/aiUsageLog');
 
 function userId(req) {
   return req.user?.sub;
@@ -25,7 +26,9 @@ async function generate(req, res, next) {
       return res.status(gate.status).json(gate.body);
     }
     const { keyword } = req.body;
-    const data = await generateHashtags(keyword);
+    // free path: no OpenAI; premium: OpenAI — missing key / API error → local buckets + data.source "fallback" (200)
+    const data = await generateHashtags(keyword, { enableOpenAi: gate.isPremium === true });
+    logAiFeatureUsage({ userId: id, feature: 'hashtag', data });
     const meta = await commitPostAnalyzeUsageAfterSuccess(id);
     if (!meta.isPremium) {
       if (meta.postAnalyzeRemaining != null) {
