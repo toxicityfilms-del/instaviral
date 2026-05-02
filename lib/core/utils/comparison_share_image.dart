@@ -24,7 +24,7 @@ Future<Uint8List> renderComparisonSharePng({
 
   final improvementMain = rel != null
       ? '${cmp.delta >= 0 ? '+' : ''}${rel.toStringAsFixed(0)}%'
-      : '${cmp.delta >= 0 ? '+' : ''}${cmp.delta} pts';
+      : '${cmp.delta >= 0 ? '+' : ''}${cmp.delta}%';
 
   final improvementColor = isPositive
       ? const Color(0xFF4ADE80)

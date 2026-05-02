@@ -42,9 +42,11 @@ class AnalysisComparisonPanel extends StatelessWidget {
     final isNegative = cmp.delta < 0;
     final deltaZero = cmp.delta == 0;
 
+    // Headline always uses "%" so copy matches "🚀 … +XX%". When last score was 0,
+    // [relativePercentVsBefore] is null — delta is shown as score points on the /100 scale.
     final amountDisplay = rel != null
         ? '${cmp.delta >= 0 ? '+' : ''}${rel.toStringAsFixed(0)}%'
-        : '${cmp.delta >= 0 ? '+' : ''}${cmp.delta} pts';
+        : '${cmp.delta >= 0 ? '+' : ''}${cmp.delta}%';
 
     final Color metricColor = isPositive
         ? _positiveGreen
@@ -260,7 +262,7 @@ class _ComparisonImprovementHeroState extends State<_ComparisonImprovementHero>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2400),
+      duration: const Duration(milliseconds: 2800),
     );
     if (widget.subtlePulse) {
       _controller.repeat(reverse: true);
@@ -287,8 +289,12 @@ class _ComparisonImprovementHeroState extends State<_ComparisonImprovementHero>
 
   @override
   Widget build(BuildContext context) {
-    final fontSize = widget.compact ? 20.0 : 28.0;
-    final letter = widget.compact ? -0.2 : -0.5;
+    final fontSize = widget.compact
+        ? 20.0
+        : widget.subtlePulse
+            ? 34.0
+            : 26.0;
+    final letter = widget.compact ? -0.2 : -0.55;
 
     List<Shadow> shadowsFor(double glowT) {
       if (widget.compact) {
@@ -297,19 +303,24 @@ class _ComparisonImprovementHeroState extends State<_ComparisonImprovementHero>
       if (widget.subtlePulse) {
         return [
           Shadow(
-            color: const Color(0xFF4ADE80).withValues(alpha: 0.32 + glowT * 0.22),
-            blurRadius: 14 + glowT * 14,
+            color: const Color(0xFF4ADE80).withValues(alpha: 0.38 + glowT * 0.2),
+            blurRadius: 18 + glowT * 16,
+            offset: const Offset(0, 4),
+          ),
+          Shadow(
+            color: const Color(0xFF22C55E).withValues(alpha: 0.22 + glowT * 0.14),
+            blurRadius: 26 + glowT * 12,
+            offset: Offset(0, 7 + glowT * 2),
+          ),
+          Shadow(
+            color: const Color(0xFF86EFAC).withValues(alpha: 0.12 + glowT * 0.1),
+            blurRadius: 32 + glowT * 8,
+            offset: const Offset(0, 0),
+          ),
+          Shadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 10,
             offset: const Offset(0, 3),
-          ),
-          Shadow(
-            color: const Color(0xFF22C55E).withValues(alpha: 0.2 + glowT * 0.12),
-            blurRadius: 22 + glowT * 10,
-            offset: Offset(0, 6 + glowT * 2),
-          ),
-          Shadow(
-            color: Colors.black.withValues(alpha: 0.38),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
           ),
         ];
       }
@@ -330,7 +341,7 @@ class _ComparisonImprovementHeroState extends State<_ComparisonImprovementHero>
     final textStyle = TextStyle(
       fontSize: fontSize,
       fontWeight: FontWeight.w900,
-      height: 1.22,
+      height: 1.18,
       color: widget.color,
       letterSpacing: letter,
     );
@@ -346,7 +357,7 @@ class _ComparisonImprovementHeroState extends State<_ComparisonImprovementHero>
       animation: _controller,
       builder: (context, child) {
         final t = Curves.easeInOut.transform(_controller.value);
-        final scale = 1.0 + t * 0.014;
+        final scale = 1.0 + t * 0.018;
         return Transform.scale(
           scale: scale,
           alignment: Alignment.centerLeft,
