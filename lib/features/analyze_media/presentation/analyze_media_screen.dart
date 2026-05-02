@@ -20,10 +20,12 @@ import 'package:reelboost_ai/core/theme/app_theme.dart';
 import 'package:reelboost_ai/core/utils/ai_credits_limit_dialog.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
 import 'package:reelboost_ai/core/utils/analysis_share_image.dart';
+import 'package:reelboost_ai/core/utils/comparison_share_image.dart';
 import 'package:reelboost_ai/core/utils/post_analysis_pack.dart';
 import 'package:reelboost_ai/models/post_analysis_models.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
 import 'package:reelboost_ai/widgets/analysis_comparison_panel.dart';
+import 'package:reelboost_ai/widgets/first_analysis_insights_banner.dart';
 import 'package:reelboost_ai/widgets/app_card.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:video_player/video_player.dart';
@@ -507,6 +509,8 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
                   _ResultsCard(
                     result: r,
                     comparisonBefore: _comparisonBefore,
+                    improveAnalyzeLoading: _loading,
+                    onImproveAnalyzeAgain: _loading ? null : _analyze,
                     strings: s,
                     showPremiumFields: showPremiumFields,
                     onCopy: _copy,
@@ -536,6 +540,8 @@ class _ResultsCard extends StatelessWidget {
   const _ResultsCard({
     required this.result,
     this.comparisonBefore,
+    required this.improveAnalyzeLoading,
+    this.onImproveAnalyzeAgain,
     required this.strings,
     required this.showPremiumFields,
     required this.onCopy,
@@ -549,6 +555,8 @@ class _ResultsCard extends StatelessWidget {
 
   final PostAnalysisResult result;
   final PostAnalysisResult? comparisonBefore;
+  final bool improveAnalyzeLoading;
+  final VoidCallback? onImproveAnalyzeAgain;
   final AppStrings strings;
   final bool showPremiumFields;
   final Future<void> Function(String text, String msg) onCopy;
@@ -620,6 +628,32 @@ class _ResultsCard extends StatelessWidget {
             after: result,
             strings: strings,
             showPremiumSuggestionFields: showPremiumFields,
+            onShareComparison: () async {
+              try {
+                await shareComparisonResultImage(
+                  context: context,
+                  before: comparisonBefore!,
+                  after: result,
+                  strings: strings,
+                );
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(strings.snackShareImageFailed)),
+                  );
+                }
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+        ] else ...[
+          FirstAnalysisInsightsBanner(strings: strings),
+          const SizedBox(height: 12),
+          GradientButton(
+            label: strings.firstAnalysisImproveCta,
+            loading: improveAnalyzeLoading,
+            onPressed: onImproveAnalyzeAgain,
+            icon: Icons.auto_awesome,
           ),
           const SizedBox(height: 12),
         ],

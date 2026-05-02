@@ -152,6 +152,19 @@ abstract class AppStrings {
   String get comparisonHook;
   String get comparisonCaption;
   String get comparisonTipsCount;
+
+  /// Short badge when viral score increased vs last run.
+  String get comparisonImprovedBadge;
+
+  String get actionShareComparisonResult;
+  String get comparisonShareCardHeading;
+  String get comparisonShareImprovementLabel;
+
+  /// Shown when no prior analysis exists yet (before/after unlocks on second run).
+  String get firstAnalysisInsightsHint;
+
+  /// Primary CTA after first analysis to run comparison on second analyze.
+  String get firstAnalysisImproveCta;
 }
 
 final appStringsProvider = Provider<AppStrings>((ref) {
@@ -461,6 +474,22 @@ class AppStringsEn implements AppStrings {
   String get comparisonCaption => 'Caption';
   @override
   String get comparisonTipsCount => 'Engagement tips (count)';
+
+  @override
+  String get comparisonImprovedBadge => '🔥 Improved';
+
+  @override
+  String get actionShareComparisonResult => 'Share Result';
+  @override
+  String get comparisonShareCardHeading => 'Score comparison';
+  @override
+  String get comparisonShareImprovementLabel => 'Improvement';
+
+  @override
+  String get firstAnalysisInsightsHint => '🔥 Analyze again to unlock improvement insights';
+
+  @override
+  String get firstAnalysisImproveCta => 'Improve & Analyze Again';
 }
 
 class AppStringsHi implements AppStrings {
@@ -765,4 +794,21 @@ class AppStringsHi implements AppStrings {
   String get comparisonCaption => 'कैप्शन';
   @override
   String get comparisonTipsCount => 'एंगेजमेंट टिप्स (संख्या)';
+
+  @override
+  String get comparisonImprovedBadge => '🔥 बेहतर';
+
+  @override
+  String get actionShareComparisonResult => 'रिज़ल्ट शेयर करें';
+  @override
+  String get comparisonShareCardHeading => 'स्कोर तुलना';
+  @override
+  String get comparisonShareImprovementLabel => 'सुधार';
+
+  @override
+  String get firstAnalysisInsightsHint =>
+      '🔥 इम्प्रूवमेंट इनसाइट्स के लिए दोबारा एनालाइज़ करें';
+
+  @override
+  String get firstAnalysisImproveCta => 'सुधारें और दोबारा एनालाइज़ करें';
 }

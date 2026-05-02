@@ -12,12 +12,17 @@ class AnalysisComparisonPanel extends StatelessWidget {
     required this.after,
     required this.strings,
     required this.showPremiumSuggestionFields,
+    required this.onShareComparison,
   });
 
   final PostAnalysisResult before;
   final PostAnalysisResult after;
   final AppStrings strings;
   final bool showPremiumSuggestionFields;
+  final VoidCallback onShareComparison;
+
+  static const Color _positiveGreen = Color(0xFF4ADE80);
+  static const Color _negativeRed = Color(0xFFF87171);
 
   static String _clip(String s, {int max = 140}) {
     final t = s.trim();
@@ -33,23 +38,51 @@ class AnalysisComparisonPanel extends StatelessWidget {
     final fg = AppTheme.onCardPrimary(context);
     final muted = AppTheme.onCardSecondary(context);
 
-    final headline = rel != null
-        ? '${cmp.delta >= 0 ? '+' : ''}${rel.toStringAsFixed(0)}% ${strings.comparisonVsLast}'
-        : '${cmp.delta >= 0 ? '+' : ''}${cmp.delta} ${strings.comparisonPointsVsLast}';
+    final isPositive = cmp.delta > 0;
+    final isNegative = cmp.delta < 0;
+
+    final String primaryMetric = rel != null
+        ? '${cmp.delta >= 0 ? '+' : ''}${rel.toStringAsFixed(0)}%'
+        : '${cmp.delta >= 0 ? '+' : ''}${cmp.delta} pts';
+
+    final Color metricColor = isPositive
+        ? _positiveGreen
+        : isNegative
+            ? _negativeRed
+            : muted;
+
+    final String metricSubtitle = rel != null ? strings.comparisonVsLast : strings.comparisonPointsVsLast;
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
-          colors: [
-            AppTheme.accent.withValues(alpha: 0.22),
-            AppTheme.accent2.withValues(alpha: 0.12),
-          ],
+          colors: isPositive
+              ? [
+                  const Color(0x4022C55E),
+                  AppTheme.accent2.withValues(alpha: 0.1),
+                ]
+              : [
+                  AppTheme.accent.withValues(alpha: 0.22),
+                  AppTheme.accent2.withValues(alpha: 0.12),
+                ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        boxShadow: AppTheme.cardShadow,
+        border: Border.all(
+          color: isPositive ? const Color(0x774ADE80) : Colors.white.withValues(alpha: 0.12),
+          width: isPositive ? 1.5 : 1,
+        ),
+        boxShadow: isPositive
+            ? [
+                BoxShadow(
+                  color: const Color(0x5522C55E),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
+                ...AppTheme.cardShadow,
+              ]
+            : AppTheme.cardShadow,
       ),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       child: Column(
@@ -68,27 +101,83 @@ class AnalysisComparisonPanel extends StatelessWidget {
                       ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  color: cmp.delta >= 0 ? const Color(0x3322C55E) : const Color(0x33DC2626),
-                  border: Border.all(
-                    color: cmp.delta >= 0 ? const Color(0x554ADE80) : const Color(0x55F87171),
-                  ),
-                ),
-                child: Text(
-                  headline,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    color: cmp.delta >= 0 ? const Color(0xFF86EFAC) : const Color(0xFFF87171),
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 14),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 10,
+            children: [
+              Text(
+                primaryMetric,
+                style: TextStyle(
+                  fontSize: 42,
+                  fontWeight: FontWeight.w900,
+                  height: 1.05,
+                  letterSpacing: -1.2,
+                  color: metricColor,
+                  shadows: isPositive
+                      ? [
+                          Shadow(
+                            color: _positiveGreen.withValues(alpha: 0.35),
+                            blurRadius: 18,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : null,
+                ),
+              ),
+              if (isPositive)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF15803D), Color(0xFF22C55E)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _positiveGreen.withValues(alpha: 0.45),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    strings.comparisonImprovedBadge,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                      letterSpacing: 0.2,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            metricSubtitle,
+            style: TextStyle(color: muted, fontSize: 13, height: 1.3),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onShareComparison,
+              icon: const Icon(Icons.share_rounded, size: 20),
+              label: Text(strings.actionShareComparisonResult),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.accent2.withValues(alpha: 0.95),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           _ComparePairRow(
             strings: strings,
             label: strings.comparisonViralScore,
@@ -96,6 +185,7 @@ class AnalysisComparisonPanel extends StatelessWidget {
             after: '${after.score}',
             fg: fg,
             muted: muted,
+            highlightAfter: isPositive,
           ),
           if (showPremiumSuggestionFields) ...[
             const SizedBox(height: 12),
@@ -160,6 +250,7 @@ class _ComparePairRow extends StatelessWidget {
     required this.after,
     required this.fg,
     required this.muted,
+    this.highlightAfter = false,
   });
 
   final AppStrings strings;
@@ -168,6 +259,7 @@ class _ComparePairRow extends StatelessWidget {
   final String after;
   final Color fg;
   final Color muted;
+  final bool highlightAfter;
 
   @override
   Widget build(BuildContext context) {
@@ -204,6 +296,7 @@ class _ComparePairRow extends StatelessWidget {
                 fg: fg,
                 muted: muted,
                 alignEnd: true,
+                accentPositive: highlightAfter,
               ),
             ),
           ],
@@ -220,6 +313,7 @@ class _Cell extends StatelessWidget {
     required this.fg,
     required this.muted,
     required this.alignEnd,
+    this.accentPositive = false,
   });
 
   final String tag;
@@ -227,15 +321,19 @@ class _Cell extends StatelessWidget {
   final Color fg;
   final Color muted;
   final bool alignEnd;
+  final bool accentPositive;
 
   @override
   Widget build(BuildContext context) {
+    final borderColor = accentPositive ? const Color(0x554ADE80) : Colors.white.withValues(alpha: 0.08);
+    final fill = accentPositive ? const Color(0x1822C55E) : Colors.white.withValues(alpha: 0.06);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: fill,
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -245,7 +343,12 @@ class _Cell extends StatelessWidget {
           Text(
             text,
             textAlign: alignEnd ? TextAlign.right : TextAlign.left,
-            style: TextStyle(color: fg, height: 1.35, fontSize: 13),
+            style: TextStyle(
+              color: accentPositive ? const Color(0xFFBEF264) : fg,
+              height: 1.35,
+              fontSize: 13,
+              fontWeight: accentPositive ? FontWeight.w600 : FontWeight.w400,
+            ),
           ),
         ],
       ),

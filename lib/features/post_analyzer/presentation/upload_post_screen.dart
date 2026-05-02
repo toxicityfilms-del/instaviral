@@ -21,8 +21,10 @@ import 'package:reelboost_ai/core/services/analysis_history_service.dart';
 import 'package:reelboost_ai/core/services/previous_analysis_store.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
 import 'package:reelboost_ai/core/utils/analysis_share_image.dart';
+import 'package:reelboost_ai/core/utils/comparison_share_image.dart';
 import 'package:reelboost_ai/core/utils/post_analysis_pack.dart';
 import 'package:reelboost_ai/widgets/analysis_comparison_panel.dart';
+import 'package:reelboost_ai/widgets/first_analysis_insights_banner.dart';
 import 'package:reelboost_ai/widgets/app_card.dart';
 import 'package:reelboost_ai/features/analyze_media/presentation/analyze_media_screen.dart';
 import 'package:reelboost_ai/features/profile/presentation/profile_screen.dart';
@@ -798,6 +800,8 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
                   _PostAnalyzerResultsSection(
                     result: _result!,
                     comparisonBefore: _comparisonBefore,
+                    improveAnalyzeLoading: _loading,
+                    onImproveAnalyzeAgain: (_loading || atDailyLimit) ? null : _analyze,
                     isPremium: !userIsFree && !_result!.lockedPremiumFields,
                     strings: s,
                     copyPackLabel: s.actionCopyFullPack,
@@ -1156,6 +1160,8 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
   const _PostAnalyzerResultsSection({
     required this.result,
     this.comparisonBefore,
+    required this.improveAnalyzeLoading,
+    this.onImproveAnalyzeAgain,
     required this.isPremium,
     required this.strings,
     required this.copyPackLabel,
@@ -1169,6 +1175,8 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
 
   final PostAnalysisResult result;
   final PostAnalysisResult? comparisonBefore;
+  final bool improveAnalyzeLoading;
+  final VoidCallback? onImproveAnalyzeAgain;
   final bool isPremium;
   final AppStrings strings;
   final String copyPackLabel;
@@ -1194,6 +1202,32 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
             after: result,
             strings: strings,
             showPremiumSuggestionFields: isPremium,
+            onShareComparison: () async {
+              try {
+                await shareComparisonResultImage(
+                  context: context,
+                  before: comparisonBefore!,
+                  after: result,
+                  strings: strings,
+                );
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(strings.snackShareImageFailed)),
+                  );
+                }
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+        ] else ...[
+          FirstAnalysisInsightsBanner(strings: strings),
+          const SizedBox(height: 12),
+          GradientButton(
+            label: strings.firstAnalysisImproveCta,
+            loading: improveAnalyzeLoading,
+            onPressed: onImproveAnalyzeAgain,
+            icon: Icons.auto_awesome,
           ),
           const SizedBox(height: 16),
         ],
