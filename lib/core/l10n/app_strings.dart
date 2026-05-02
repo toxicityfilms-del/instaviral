@@ -507,7 +507,7 @@ class AppStringsEn implements AppStrings {
   String get comparisonSharePreviewTitle => 'Share card preview';
 
   @override
-  String get firstAnalysisInsightsHint => '🔥 Analyze again to unlock improvement insights';
+  String get firstAnalysisInsightsHint => '⚡ Analyze again to unlock improvement insights';
 
   @override
   String get firstAnalysisImproveCta => 'Improve Caption & Re-Analyze 🔥';
@@ -840,7 +840,7 @@ class AppStringsHi implements AppStrings {
 
   @override
   String get firstAnalysisInsightsHint =>
-      '🔥 इम्प्रूवमेंट इनसाइट्स के लिए दोबारा एनालाइज़ करें';
+      '⚡ इम्प्रूवमेंट इनसाइट्स के लिए दोबारा एनालाइज़ करें';
 
   @override
   String get firstAnalysisImproveCta => 'कैप्शन बेहतर करें और दोबारा एनालाइज़ करें 🔥';

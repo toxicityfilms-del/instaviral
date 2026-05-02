@@ -99,10 +99,10 @@ class _FirstAnalysisInsightsBannerState extends State<FirstAnalysisInsightsBanne
                     child: Padding(
                       padding: const EdgeInsets.all(8),
                       child: Icon(
-                        Icons.local_fire_department_rounded,
+                        Icons.bolt_rounded,
                         color: Color.lerp(
-                          const Color(0xFFFF8A65),
-                          const Color(0xFFFFAB40),
+                          const Color(0xFFFFE066),
+                          const Color(0xFFFFD54F),
                           t,
                         ),
                         size: 26,
