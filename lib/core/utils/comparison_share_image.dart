@@ -18,13 +18,10 @@ Future<Uint8List> renderComparisonSharePng({
   const pad = 52.0;
 
   final cmp = compareScores(before, after);
-  final rel = cmp.relativePercentVsBefore;
   final isPositive = cmp.delta > 0;
   final isNegative = cmp.delta < 0;
 
-  final improvementMain = rel != null
-      ? '${cmp.delta >= 0 ? '+' : ''}${rel.toStringAsFixed(0)}%'
-      : '${cmp.delta >= 0 ? '+' : ''}${cmp.delta}%';
+  final improvementMain = formatComparisonImprovementDisplay(before, after);
 
   final improvementColor = isPositive
       ? const Color(0xFF4ADE80)
@@ -175,6 +172,7 @@ Future<Uint8List> renderComparisonSharePng({
 
   y += impMain.height + 28;
 
+  final rel = cmp.relativePercentVsBefore;
   final sub = TextPainter(
     text: TextSpan(
       text: rel != null ? strings.comparisonVsLast : strings.comparisonPointsVsLast,

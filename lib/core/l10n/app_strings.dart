@@ -167,6 +167,7 @@ abstract class AppStrings {
   String get actionShareComparisonResult;
   String get comparisonShareCardHeading;
   String get comparisonShareImprovementLabel;
+  String get comparisonSharePreviewTitle;
 
   /// Shown when no prior analysis exists yet (before/after unlocks on second run).
   String get firstAnalysisInsightsHint;
@@ -503,6 +504,9 @@ class AppStringsEn implements AppStrings {
   String get comparisonShareImprovementLabel => 'Improvement';
 
   @override
+  String get comparisonSharePreviewTitle => 'Share card preview';
+
+  @override
   String get firstAnalysisInsightsHint => '🔥 Analyze again to unlock improvement insights';
 
   @override
@@ -830,6 +834,9 @@ class AppStringsHi implements AppStrings {
   String get comparisonShareCardHeading => 'स्कोर तुलना';
   @override
   String get comparisonShareImprovementLabel => 'सुधार';
+
+  @override
+  String get comparisonSharePreviewTitle => 'शेयर कार्ड प्रीव्यू';
 
   @override
   String get firstAnalysisInsightsHint =>

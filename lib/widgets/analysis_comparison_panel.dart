@@ -158,6 +158,13 @@ class AnalysisComparisonPanel extends StatelessWidget {
             metricSubtitle,
             style: TextStyle(color: muted, fontSize: 13, height: 1.3),
           ),
+          const SizedBox(height: 14),
+          _ComparisonSharePreviewCard(
+            before: before,
+            after: after,
+            strings: strings,
+            muted: muted,
+          ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -232,6 +239,165 @@ class AnalysisComparisonPanel extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Mirrors the PNG built in [renderComparisonSharePng] (before / after / improvement).
+class _ComparisonSharePreviewCard extends StatelessWidget {
+  const _ComparisonSharePreviewCard({
+    required this.before,
+    required this.after,
+    required this.strings,
+    required this.muted,
+  });
+
+  final PostAnalysisResult before;
+  final PostAnalysisResult after;
+  final AppStrings strings;
+  final Color muted;
+
+  static const Color _positiveGreen = Color(0xFF4ADE80);
+  static const Color _negativeRed = Color(0xFFF87171);
+
+  @override
+  Widget build(BuildContext context) {
+    final cmp = compareScores(before, after);
+    final isPositive = cmp.delta > 0;
+    final isNegative = cmp.delta < 0;
+    final improvement = formatComparisonImprovementDisplay(before, after);
+    final impColor = isPositive
+        ? _positiveGreen
+        : isNegative
+            ? _negativeRed
+            : muted;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.07),
+            AppTheme.accent.withValues(alpha: 0.06),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accent2.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            strings.comparisonSharePreviewTitle,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+              color: muted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _PreviewMetric(
+                  label: strings.comparisonBefore,
+                  value: '${before.score}',
+                  alignEnd: false,
+                  muted: muted,
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 52,
+                margin: const EdgeInsets.symmetric(horizontal: 10),
+                color: Colors.white.withValues(alpha: 0.1),
+              ),
+              Expanded(
+                child: _PreviewMetric(
+                  label: strings.comparisonAfter,
+                  value: '${after.score}',
+                  alignEnd: true,
+                  muted: muted,
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                strings.comparisonShareImprovementLabel,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.onCardPrimary(context).withValues(alpha: 0.88),
+                ),
+              ),
+              Text(
+                improvement,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                  color: impColor,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewMetric extends StatelessWidget {
+  const _PreviewMetric({
+    required this.label,
+    required this.value,
+    required this.alignEnd,
+    required this.muted,
+  });
+
+  final String label;
+  final String value;
+  final bool alignEnd;
+  final Color muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = AppTheme.onCardPrimary(context);
+    return Column(
+      crossAxisAlignment: alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: muted),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w900,
+            height: 1.05,
+            color: fg.withValues(alpha: 0.96),
+          ),
+        ),
+      ],
     );
   }
 }

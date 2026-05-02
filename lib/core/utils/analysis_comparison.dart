@@ -26,6 +26,15 @@ AnalysisScoreComparison compareScores(PostAnalysisResult before, PostAnalysisRes
   );
 }
 
+/// Same formatting as the comparison share PNG headline row (+18%, +5%, −3%, …).
+String formatComparisonImprovementDisplay(PostAnalysisResult before, PostAnalysisResult after) {
+  final cmp = compareScores(before, after);
+  final rel = cmp.relativePercentVsBefore;
+  return rel != null
+      ? '${cmp.delta >= 0 ? '+' : ''}${rel.toStringAsFixed(0)}%'
+      : '${cmp.delta >= 0 ? '+' : ''}${cmp.delta}%';
+}
+
 String primaryCaptionForCompare(PostAnalysisResult r) {
   final cap = r.improvedCaption.trim().isNotEmpty ? r.improvedCaption : r.caption;
   return cap.trim();
