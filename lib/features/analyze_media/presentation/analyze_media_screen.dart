@@ -15,17 +15,19 @@ import 'package:reelboost_ai/core/premium/premium_checkout.dart';
 import 'package:reelboost_ai/core/premium/premium_monthly_pitch_dialog.dart';
 import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/services/analysis_history_service.dart';
+import 'package:reelboost_ai/core/services/previous_analysis_store.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
 import 'package:reelboost_ai/core/utils/ai_credits_limit_dialog.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
+import 'package:reelboost_ai/core/utils/analysis_share_image.dart';
 import 'package:reelboost_ai/core/utils/post_analysis_pack.dart';
 import 'package:reelboost_ai/models/post_analysis_models.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
+import 'package:reelboost_ai/widgets/analysis_comparison_panel.dart';
 import 'package:reelboost_ai/widgets/app_card.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AnalyzeMediaScreen extends ConsumerStatefulWidget {
@@ -50,6 +52,7 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
 
   bool _loading = false;
   PostAnalysisResult? _result;
+  PostAnalysisResult? _comparisonBefore;
 
   @override
   void dispose() {
@@ -225,7 +228,13 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
             );
       }
       if (!mounted) return;
-      setState(() => _result = response.result);
+      final previous = await PreviousAnalysisStore.load(PreviousAnalysisStore.sourceMediaAnalyzer);
+      if (!mounted) return;
+      setState(() {
+        _result = response.result;
+        _comparisonBefore = previous;
+      });
+      await PreviousAnalysisStore.save(PreviousAnalysisStore.sourceMediaAnalyzer, response.result);
       AppHaptics.success();
       final noteTitle = _notes.text.trim();
       unawaited(
@@ -237,6 +246,7 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
           result: response.result,
         ),
       );
+      if (!mounted) return;
       final rem = response.postAnalyzeRemaining;
       if (response.isPremium != true && rem != null && rem <= 0) {
         showLastFreeAiUseSnackBar(
@@ -496,13 +506,20 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
                   const SizedBox(height: 16),
                   _ResultsCard(
                     result: r,
+                    comparisonBefore: _comparisonBefore,
+                    strings: s,
                     showPremiumFields: showPremiumFields,
                     onCopy: _copy,
                     copyPackLabel: s.actionCopyFullPack,
                     snackCopied: s.snackFullPackCopied,
-                    shareLabel: s.actionSharePack,
+                    shareLabel: s.actionShare,
                     remindLabel: s.actionRemindPost,
-                    onShare: () => Share.share(postAnalysisCopyPack(r), subject: s.appTitle),
+                    onShare: () => showAnalysisShareSheet(
+                      context: context,
+                      strings: s,
+                      result: r,
+                      includePremiumTips: showPremiumFields,
+                    ),
                     onRemind: _pickPostReminder,
                   ),
                 ],
@@ -518,6 +535,8 @@ class _AnalyzeMediaScreenState extends ConsumerState<AnalyzeMediaScreen> {
 class _ResultsCard extends StatelessWidget {
   const _ResultsCard({
     required this.result,
+    this.comparisonBefore,
+    required this.strings,
     required this.showPremiumFields,
     required this.onCopy,
     required this.copyPackLabel,
@@ -529,6 +548,8 @@ class _ResultsCard extends StatelessWidget {
   });
 
   final PostAnalysisResult result;
+  final PostAnalysisResult? comparisonBefore;
+  final AppStrings strings;
   final bool showPremiumFields;
   final Future<void> Function(String text, String msg) onCopy;
   final String copyPackLabel;
@@ -593,6 +614,15 @@ class _ResultsCard extends StatelessWidget {
           style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 10),
+        if (comparisonBefore != null) ...[
+          AnalysisComparisonPanel(
+            before: comparisonBefore!,
+            after: result,
+            strings: strings,
+            showPremiumSuggestionFields: showPremiumFields,
+          ),
+          const SizedBox(height: 12),
+        ],
         AppCard(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
           child: Column(

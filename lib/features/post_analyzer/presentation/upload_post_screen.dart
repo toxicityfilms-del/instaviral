@@ -18,8 +18,11 @@ import 'package:reelboost_ai/core/providers/app_providers.dart';
 import 'package:reelboost_ai/core/theme/app_theme.dart';
 import 'package:reelboost_ai/core/utils/ai_credits_limit_dialog.dart';
 import 'package:reelboost_ai/core/services/analysis_history_service.dart';
+import 'package:reelboost_ai/core/services/previous_analysis_store.dart';
 import 'package:reelboost_ai/core/utils/api_error_message.dart';
+import 'package:reelboost_ai/core/utils/analysis_share_image.dart';
 import 'package:reelboost_ai/core/utils/post_analysis_pack.dart';
+import 'package:reelboost_ai/widgets/analysis_comparison_panel.dart';
 import 'package:reelboost_ai/widgets/app_card.dart';
 import 'package:reelboost_ai/features/analyze_media/presentation/analyze_media_screen.dart';
 import 'package:reelboost_ai/features/profile/presentation/profile_screen.dart';
@@ -28,7 +31,6 @@ import 'package:reelboost_ai/models/user_model.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
-import 'package:share_plus/share_plus.dart';
 
 Future<void> _copyToClipboard(BuildContext context, String text, String message) async {
   AppHaptics.copy();
@@ -58,6 +60,7 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
   Uint8List? _previewBytes;
 
   PostAnalysisResult? _result;
+  PostAnalysisResult? _comparisonBefore;
   bool _loading = false;
   bool _rewardLoading = false;
   bool _retryingReward = false;
@@ -451,10 +454,14 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
             );
       }
       if (!mounted) return;
+      final previous = await PreviousAnalysisStore.load(PreviousAnalysisStore.sourcePostAnalyzer);
+      if (!mounted) return;
       setState(() {
         _result = response.result;
+        _comparisonBefore = previous;
         _lastFailIdea = null;
       });
+      unawaited(PreviousAnalysisStore.save(PreviousAnalysisStore.sourcePostAnalyzer, response.result));
       AppHaptics.success();
       unawaited(SharedPreferences.getInstance().then((p) => p.remove(_lastFailKey)));
       unawaited(
@@ -790,10 +797,11 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
                   const SizedBox(height: 36),
                   _PostAnalyzerResultsSection(
                     result: _result!,
+                    comparisonBefore: _comparisonBefore,
                     isPremium: !userIsFree && !_result!.lockedPremiumFields,
                     strings: s,
                     copyPackLabel: s.actionCopyFullPack,
-                    shareButtonLabel: s.actionSharePack,
+                    shareButtonLabel: s.actionShare,
                     remindButtonLabel: s.actionRemindPost,
                     onCopyCaption: _result!.caption.isEmpty
                         ? null
@@ -803,7 +811,12 @@ class _UploadPostScreenState extends ConsumerState<UploadPostScreen> {
                       postAnalysisCopyPack(_result!),
                       s.snackFullPackCopied,
                     ),
-                    onSharePack: () => Share.share(postAnalysisCopyPack(_result!), subject: s.appTitle),
+                    onShare: () => showAnalysisShareSheet(
+                      context: context,
+                      strings: s,
+                      result: _result!,
+                      includePremiumTips: !userIsFree && !_result!.lockedPremiumFields,
+                    ),
                     onScheduleReminder: _pickPostReminder,
                   ),
                 ],
@@ -1142,6 +1155,7 @@ class _MissingNicheWarning extends StatelessWidget {
 class _PostAnalyzerResultsSection extends StatelessWidget {
   const _PostAnalyzerResultsSection({
     required this.result,
+    this.comparisonBefore,
     required this.isPremium,
     required this.strings,
     required this.copyPackLabel,
@@ -1149,11 +1163,12 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
     required this.remindButtonLabel,
     required this.onCopyCaption,
     required this.onCopyPack,
-    required this.onSharePack,
+    required this.onShare,
     required this.onScheduleReminder,
   });
 
   final PostAnalysisResult result;
+  final PostAnalysisResult? comparisonBefore;
   final bool isPremium;
   final AppStrings strings;
   final String copyPackLabel;
@@ -1161,7 +1176,7 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
   final String remindButtonLabel;
   final VoidCallback? onCopyCaption;
   final VoidCallback onCopyPack;
-  final VoidCallback onSharePack;
+  final VoidCallback onShare;
   final VoidCallback onScheduleReminder;
 
   @override
@@ -1173,6 +1188,15 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
       children: [
         _ResultsScreenHeader(),
         const SizedBox(height: 14),
+        if (comparisonBefore != null) ...[
+          AnalysisComparisonPanel(
+            before: comparisonBefore!,
+            after: result,
+            strings: strings,
+            showPremiumSuggestionFields: isPremium,
+          ),
+          const SizedBox(height: 16),
+        ],
         _GlassResultCard(
           child: Row(
             children: [
@@ -1210,7 +1234,7 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: onSharePack,
+                onPressed: onShare,
                 icon: const Icon(Icons.share_rounded, size: 20),
                 label: Text(shareButtonLabel, style: const TextStyle(fontSize: 12.5)),
               ),

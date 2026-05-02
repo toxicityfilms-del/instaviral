@@ -111,6 +111,17 @@ abstract class AppStrings {
   String get checklistItemAudio;
 
   String get actionSharePack;
+  String get actionShare;
+  String get shareSheetTitle;
+  String get shareAsImageTitle;
+  String get shareAsImageSubtitle;
+  String get shareAsTextTitle;
+  String get analysisShareScoreLabel;
+  String get analysisShareNichePrefix;
+  String get analysisShareEngagementTips;
+  String get analysisShareTipsLockedBody;
+  String get analysisShareTipsEmpty;
+  String get snackShareImageFailed;
   String get actionRemindPost;
   String get actionCopyFullPack;
   String get snackFullPackCopied;
@@ -131,6 +142,16 @@ abstract class AppStrings {
   String get viralNicheLabel;
 
   String get analyzeMediaCompareTitle;
+
+  String get comparisonTitle;
+  String get comparisonVsLast;
+  String get comparisonPointsVsLast;
+  String get comparisonBefore;
+  String get comparisonAfter;
+  String get comparisonViralScore;
+  String get comparisonHook;
+  String get comparisonCaption;
+  String get comparisonTipsCount;
 }
 
 final appStringsProvider = Provider<AppStrings>((ref) {
@@ -355,6 +376,30 @@ class AppStringsEn implements AppStrings {
   @override
   String get actionSharePack => 'Share pack';
   @override
+  String get actionShare => 'Share';
+  @override
+  String get shareSheetTitle => 'Share analysis';
+  @override
+  String get shareAsImageTitle => 'Share as image';
+  @override
+  String get shareAsImageSubtitle => 'Instagram Story, WhatsApp, and more';
+  @override
+  String get shareAsTextTitle => 'Share as text';
+  @override
+  String get analysisShareScoreLabel => 'VIRAL SCORE';
+  @override
+  String get analysisShareNichePrefix => 'Niche';
+  @override
+  String get analysisShareEngagementTips => 'Engagement tips';
+  @override
+  String get analysisShareTipsLockedBody =>
+      'Unlock personalized engagement tips with Premium.';
+  @override
+  String get analysisShareTipsEmpty =>
+      'Keep testing hooks, pacing, and posting times to improve reach.';
+  @override
+  String get snackShareImageFailed => 'Couldn’t share image. Try again.';
+  @override
   String get actionRemindPost => 'Remind me to post';
   @override
   String get actionCopyFullPack => 'Copy full pack (hook + caption + hashtags + more)';
@@ -397,6 +442,25 @@ class AppStringsEn implements AppStrings {
   String get analyzeMediaCompareTitle =>
       'Not the same as Post analyzer: that one is for your written idea + optional photo. '
       'This screen needs the actual file (image or video).';
+
+  @override
+  String get comparisonTitle => 'Compared to last analysis';
+  @override
+  String get comparisonVsLast => 'vs last score';
+  @override
+  String get comparisonPointsVsLast => 'pts vs last score';
+  @override
+  String get comparisonBefore => 'Before';
+  @override
+  String get comparisonAfter => 'After';
+  @override
+  String get comparisonViralScore => 'Viral score';
+  @override
+  String get comparisonHook => 'Hook';
+  @override
+  String get comparisonCaption => 'Caption';
+  @override
+  String get comparisonTipsCount => 'Engagement tips (count)';
 }
 
 class AppStringsHi implements AppStrings {
@@ -616,6 +680,30 @@ class AppStringsHi implements AppStrings {
   @override
   String get actionSharePack => 'पैक शेयर';
   @override
+  String get actionShare => 'शेयर';
+  @override
+  String get shareSheetTitle => 'एनालिसिस शेयर करें';
+  @override
+  String get shareAsImageTitle => 'इमेज के रूप में शेयर';
+  @override
+  String get shareAsImageSubtitle => 'Instagram Story, WhatsApp और अन्य';
+  @override
+  String get shareAsTextTitle => 'टेक्स्ट के रूप में शेयर';
+  @override
+  String get analysisShareScoreLabel => 'वायरल स्कोर';
+  @override
+  String get analysisShareNichePrefix => 'निच';
+  @override
+  String get analysisShareEngagementTips => 'एंगेजमेंट टिप्स';
+  @override
+  String get analysisShareTipsLockedBody =>
+      'पर्सनलाइज़्ड एंगेजमेंट टिप्स के लिए Premium लें।';
+  @override
+  String get analysisShareTipsEmpty =>
+      'रीच बढ़ाने के लिए हुक, पेसिंग और पोस्ट टाइम टेस्ट करते रहें।';
+  @override
+  String get snackShareImageFailed => 'इमेज शेयर नहीं हो सकी। दोबारा कोशिश करें।';
+  @override
   String get actionRemindPost => 'पोस्ट की याद दिलाएँ';
   @override
   String get actionCopyFullPack => 'पूरा पैक कॉपी (हुक + कैप्शन + हैशटैग…)';
@@ -658,4 +746,23 @@ class AppStringsHi implements AppStrings {
   String get analyzeMediaCompareTitle =>
       'पोस्ट एनालाइज़र जैसा नहीं: वहाँ लिखा आइडिया + ऑप्शनल फोटो। '
       'यहाँ असली फाइल (फोटो या वीडियो) चाहिए।';
+
+  @override
+  String get comparisonTitle => 'पिछली एनालिसिस से तुलना';
+  @override
+  String get comparisonVsLast => 'पिछले स्कोर से';
+  @override
+  String get comparisonPointsVsLast => 'पॉइंट पिछले स्कोर से';
+  @override
+  String get comparisonBefore => 'पहले';
+  @override
+  String get comparisonAfter => 'अब';
+  @override
+  String get comparisonViralScore => 'वायरल स्कोर';
+  @override
+  String get comparisonHook => 'हुक';
+  @override
+  String get comparisonCaption => 'कैप्शन';
+  @override
+  String get comparisonTipsCount => 'एंगेजमेंट टिप्स (संख्या)';
 }
