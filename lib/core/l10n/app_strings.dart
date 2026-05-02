@@ -156,6 +156,14 @@ abstract class AppStrings {
   /// Short badge when viral score increased vs last run.
   String get comparisonImprovedBadge;
 
+  /// [amount] includes sign, e.g. "+18%" or "+5 pts".
+  String comparisonImproveHeadline(String amount);
+
+  /// [amount] includes sign, e.g. "-12%" or "-3 pts".
+  String comparisonDeclineHeadline(String amount);
+
+  String get comparisonScoreFlatHeadline;
+
   String get actionShareComparisonResult;
   String get comparisonShareCardHeading;
   String get comparisonShareImprovementLabel;
@@ -479,6 +487,15 @@ class AppStringsEn implements AppStrings {
   String get comparisonImprovedBadge => '🔥 Improved';
 
   @override
+  String comparisonImproveHeadline(String amount) => '🚀 Your post improved by $amount';
+
+  @override
+  String comparisonDeclineHeadline(String amount) => '📉 Your post score changed by $amount';
+
+  @override
+  String get comparisonScoreFlatHeadline => 'Your viral score stayed the same vs last run';
+
+  @override
   String get actionShareComparisonResult => 'Share Result';
   @override
   String get comparisonShareCardHeading => 'Score comparison';
@@ -797,6 +814,15 @@ class AppStringsHi implements AppStrings {
 
   @override
   String get comparisonImprovedBadge => '🔥 बेहतर';
+
+  @override
+  String comparisonImproveHeadline(String amount) => '🚀 आपकी पोस्ट $amount बेहतर हुई';
+
+  @override
+  String comparisonDeclineHeadline(String amount) => '📉 स्कोर में बदलाव: $amount';
+
+  @override
+  String get comparisonScoreFlatHeadline => 'वायरल स्कोर पिछली बार जैसा ही है';
 
   @override
   String get actionShareComparisonResult => 'रिज़ल्ट शेयर करें';

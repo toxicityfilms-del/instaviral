@@ -40,8 +40,9 @@ class AnalysisComparisonPanel extends StatelessWidget {
 
     final isPositive = cmp.delta > 0;
     final isNegative = cmp.delta < 0;
+    final deltaZero = cmp.delta == 0;
 
-    final String primaryMetric = rel != null
+    final amountDisplay = rel != null
         ? '${cmp.delta >= 0 ? '+' : ''}${rel.toStringAsFixed(0)}%'
         : '${cmp.delta >= 0 ? '+' : ''}${cmp.delta} pts';
 
@@ -50,6 +51,12 @@ class AnalysisComparisonPanel extends StatelessWidget {
         : isNegative
             ? _negativeRed
             : muted;
+
+    final headline = deltaZero
+        ? strings.comparisonScoreFlatHeadline
+        : isPositive
+            ? strings.comparisonImproveHeadline(amountDisplay)
+            : strings.comparisonDeclineHeadline(amountDisplay);
 
     final String metricSubtitle = rel != null ? strings.comparisonVsLast : strings.comparisonPointsVsLast;
 
@@ -104,61 +111,46 @@ class AnalysisComparisonPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              Text(
-                primaryMetric,
-                style: TextStyle(
-                  fontSize: 42,
-                  fontWeight: FontWeight.w900,
-                  height: 1.05,
-                  letterSpacing: -1.2,
-                  color: metricColor,
-                  shadows: isPositive
-                      ? [
-                          Shadow(
-                            color: _positiveGreen.withValues(alpha: 0.35),
-                            blurRadius: 18,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : null,
+          _ComparisonImprovementHero(
+            text: headline,
+            color: metricColor,
+            subtlePulse: isPositive && !deltaZero,
+            compact: deltaZero,
+          ),
+          if (isPositive && !deltaZero) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF15803D), Color(0xFF22C55E)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _positiveGreen.withValues(alpha: 0.45),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  strings.comparisonImprovedBadge,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    letterSpacing: 0.2,
+                    color: Colors.white,
+                  ),
                 ),
               ),
-              if (isPositive)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(999),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF15803D), Color(0xFF22C55E)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _positiveGreen.withValues(alpha: 0.45),
-                        blurRadius: 14,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    strings.comparisonImprovedBadge,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
-                      letterSpacing: 0.2,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+            ),
+          ],
           const SizedBox(height: 6),
           Text(
             metricSubtitle,
@@ -238,6 +230,132 @@ class AnalysisComparisonPanel extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _ComparisonImprovementHero extends StatefulWidget {
+  const _ComparisonImprovementHero({
+    required this.text,
+    required this.color,
+    required this.subtlePulse,
+    required this.compact,
+  });
+
+  final String text;
+  final Color color;
+  final bool subtlePulse;
+  final bool compact;
+
+  @override
+  State<_ComparisonImprovementHero> createState() => _ComparisonImprovementHeroState();
+}
+
+class _ComparisonImprovementHeroState extends State<_ComparisonImprovementHero>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    );
+    if (widget.subtlePulse) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_ComparisonImprovementHero oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.subtlePulse) {
+      if (!_controller.isAnimating) {
+        _controller.repeat(reverse: true);
+      }
+    } else {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fontSize = widget.compact ? 20.0 : 28.0;
+    final letter = widget.compact ? -0.2 : -0.5;
+
+    List<Shadow> shadowsFor(double glowT) {
+      if (widget.compact) {
+        return [];
+      }
+      if (widget.subtlePulse) {
+        return [
+          Shadow(
+            color: const Color(0xFF4ADE80).withValues(alpha: 0.32 + glowT * 0.22),
+            blurRadius: 14 + glowT * 14,
+            offset: const Offset(0, 3),
+          ),
+          Shadow(
+            color: const Color(0xFF22C55E).withValues(alpha: 0.2 + glowT * 0.12),
+            blurRadius: 22 + glowT * 10,
+            offset: Offset(0, 6 + glowT * 2),
+          ),
+          Shadow(
+            color: Colors.black.withValues(alpha: 0.38),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ];
+      }
+      return [
+        Shadow(
+          color: widget.color.withValues(alpha: 0.35),
+          blurRadius: 12,
+          offset: const Offset(0, 3),
+        ),
+        Shadow(
+          color: Colors.black.withValues(alpha: 0.35),
+          blurRadius: 6,
+          offset: const Offset(0, 2),
+        ),
+      ];
+    }
+
+    final textStyle = TextStyle(
+      fontSize: fontSize,
+      fontWeight: FontWeight.w900,
+      height: 1.22,
+      color: widget.color,
+      letterSpacing: letter,
+    );
+
+    if (!widget.subtlePulse) {
+      return Text(
+        widget.text,
+        style: textStyle.copyWith(shadows: shadowsFor(0)),
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = Curves.easeInOut.transform(_controller.value);
+        final scale = 1.0 + t * 0.014;
+        return Transform.scale(
+          scale: scale,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            widget.text,
+            style: textStyle.copyWith(shadows: shadowsFor(t)),
+          ),
+        );
+      },
     );
   }
 }
