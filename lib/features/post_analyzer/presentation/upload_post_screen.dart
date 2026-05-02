@@ -25,6 +25,7 @@ import 'package:reelboost_ai/core/utils/comparison_share_image.dart';
 import 'package:reelboost_ai/core/utils/post_analysis_pack.dart';
 import 'package:reelboost_ai/widgets/analysis_comparison_panel.dart';
 import 'package:reelboost_ai/widgets/first_analysis_insights_banner.dart';
+import 'package:reelboost_ai/widgets/first_analysis_reanalyze_cta.dart';
 import 'package:reelboost_ai/widgets/app_card.dart';
 import 'package:reelboost_ai/features/analyze_media/presentation/analyze_media_screen.dart';
 import 'package:reelboost_ai/features/profile/presentation/profile_screen.dart';
@@ -1223,11 +1224,10 @@ class _PostAnalyzerResultsSection extends StatelessWidget {
         ] else ...[
           FirstAnalysisInsightsBanner(strings: strings),
           const SizedBox(height: 12),
-          GradientButton(
+          FirstAnalysisReanalyzeCta(
             label: strings.firstAnalysisImproveCta,
             loading: improveAnalyzeLoading,
             onPressed: onImproveAnalyzeAgain,
-            icon: Icons.auto_awesome,
           ),
           const SizedBox(height: 16),
         ],

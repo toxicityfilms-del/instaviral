@@ -489,7 +489,7 @@ class AppStringsEn implements AppStrings {
   String get firstAnalysisInsightsHint => '🔥 Analyze again to unlock improvement insights';
 
   @override
-  String get firstAnalysisImproveCta => 'Improve & Analyze Again';
+  String get firstAnalysisImproveCta => 'Improve Caption & Re-Analyze 🔥';
 }
 
 class AppStringsHi implements AppStrings {
@@ -810,5 +810,5 @@ class AppStringsHi implements AppStrings {
       '🔥 इम्प्रूवमेंट इनसाइट्स के लिए दोबारा एनालाइज़ करें';
 
   @override
-  String get firstAnalysisImproveCta => 'सुधारें और दोबारा एनालाइज़ करें';
+  String get firstAnalysisImproveCta => 'कैप्शन बेहतर करें और दोबारा एनालाइज़ करें 🔥';
 }

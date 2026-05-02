@@ -26,6 +26,7 @@ import 'package:reelboost_ai/models/post_analysis_models.dart';
 import 'package:reelboost_ai/services/reelboost_api_service.dart';
 import 'package:reelboost_ai/widgets/analysis_comparison_panel.dart';
 import 'package:reelboost_ai/widgets/first_analysis_insights_banner.dart';
+import 'package:reelboost_ai/widgets/first_analysis_reanalyze_cta.dart';
 import 'package:reelboost_ai/widgets/app_card.dart';
 import 'package:reelboost_ai/widgets/gradient_button.dart';
 import 'package:video_player/video_player.dart';
@@ -649,11 +650,10 @@ class _ResultsCard extends StatelessWidget {
         ] else ...[
           FirstAnalysisInsightsBanner(strings: strings),
           const SizedBox(height: 12),
-          GradientButton(
+          FirstAnalysisReanalyzeCta(
             label: strings.firstAnalysisImproveCta,
             loading: improveAnalyzeLoading,
             onPressed: onImproveAnalyzeAgain,
-            icon: Icons.auto_awesome,
           ),
           const SizedBox(height: 12),
         ],
